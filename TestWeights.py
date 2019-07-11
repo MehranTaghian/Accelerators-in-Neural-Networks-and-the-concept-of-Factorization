@@ -9,13 +9,25 @@
 # model = load_model(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\resnet50\resnet50_weights_tf_dim_ordering_tf_kernels.h5")
 
 
-from keras.models import load_model
+# from keras.models import load_model
 
-model = load_model(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy")
+# model = load_model(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy")
+import numpy as np
 
+net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy", "rb"), encoding="latin1", allow_pickle=True).item()
 
+# a = np.array(net_data["conv2"][0])
+# print(a.shape)
+#
+# b = np.array(net_data["conv2"][1])
+# print(b.shape)
 
+for i in range(6, 9):
+    a = np.array(net_data["fc" + str(i)][0])
+    print(a.shape)
 
+# a = np.array(net_data["fc6"][0])
+# print(a.shape)
 
 
 

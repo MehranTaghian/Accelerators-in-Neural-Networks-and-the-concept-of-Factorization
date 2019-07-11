@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
+
 sess = tf.Session()
 #
 # a = tf.constant(4, dtype=tf.float32)
