@@ -1,5 +1,5 @@
 import numpy as np
-from Accelerator import factorization
+# from Accelerator import factorization
 
 def conv_factorization(kernel):
     """
