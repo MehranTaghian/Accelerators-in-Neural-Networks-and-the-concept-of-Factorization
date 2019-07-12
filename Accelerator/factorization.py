@@ -1,6 +1,9 @@
 import numpy as np
 
 
+from memory_profiler import profile
+
+
 # a = np.array([
 #     [[1, 2, 3],
 #      [2, 3, 4],
@@ -12,9 +15,8 @@ import numpy as np
 #      [4, 6, 7],
 #      [1, 8, 9]]])
 
-
-# a = np.random.randint(5, size=(5, 5, 5))
-# k = np.random.randint(5, size=(3, 3, 5))
+a = np.random.randint(5, size=(5, 5, 5))
+k = np.random.randint(5, size=(3, 3, 5))
 
 
 # a = np.ones([5, 5, 5])
@@ -24,11 +26,13 @@ import numpy as np
 #               [4, 5, 6],
 #               [7, 8, 9]])
 
+
 def quantization(kernel):
     r_max = np.max(kernel)
     r_min = np.min(kernel)
-    quantized = np.int8(255/(r_max - r_min) * kernel)
+    quantized = np.int8(255 / (r_max - r_min) * kernel)
     return quantized
+
 
 def convolve(input_data, conv_layer, bias, padding="VALID", stride=1):
     """
@@ -51,11 +55,16 @@ def convolve(input_data, conv_layer, bias, padding="VALID", stride=1):
     result = np.zeros(output_size)
 
     conv_layer = quantization(conv_layer)
-
     for f in range(filter_num):
+        print("Filter", f)
         kernel = conv_layer[:, :, :, f]
-        repeated_w = conv_factorization(kernel)
-        result[:, :, f] = conv2d(input_data, kernel, repeated_w, stride) + bias[f]
+        repeated_w, max_index, min_index = conv_factorization(kernel)
+        # print("Maximum repeated weight:", max_index, "Number of repeated:", len(repeated_w[max_index][0]))
+        # print("Minimum repeated weight: ", min_index, "Number of repeated:", len(repeated_w[min_index][0]))
+        conv_result, number_of_sum, number_of_prod = conv2d(input_data, kernel, repeated_w, stride)
+        result[:, :, f] = conv_result + bias[f]
+        print("Number of sum", number_of_sum)
+        print("Number of prod", number_of_prod)
 
     return result
 
@@ -66,13 +75,26 @@ def conv_factorization(kernel):
         weight and "indexes" is the indexes where W happens.
     :param kernel:
     :return:
+    repeated_dict: A dictionary of type: (key, value) where "key"s are the weights, and "value"s are
+    indexes of unique weight
+    max_index: The weight whose repeated indexes are most
+    min_index: The weight whose repeated indexes are least
     """
     uniq = np.unique(kernel)
-    repeated_dict = []
+    repeated_dict = {}
+    max = 0
+    min = np.inf
+    max_index = min_index = 0
     for i in uniq:
         index = np.where(kernel == i)
-        repeated_dict.append((i, index))
-    return repeated_dict
+        if len(index[0]) > max:
+            max = len(index[0])
+            max_index = i
+        if len(index[0]) < min:
+            min = len(index[0])
+            min_index = i
+        repeated_dict[i] = index
+    return repeated_dict, max_index, min_index
 
 
 def conv2d(data, kernel, repeated_position, stride=1):
@@ -86,30 +108,36 @@ def conv2d(data, kernel, repeated_position, stride=1):
     """
     result_size = int((data.shape[0] - kernel.shape[0]) / stride + 1)
     result = np.zeros([result_size, result_size])
+    number_of_sum = 0
+    number_of_prod = 0
+
     for i in range(0, int((data.shape[0] - kernel.shape[0]) / stride) + 1, stride):
         for j in range(0, int((data.shape[1] - kernel.shape[1]) / stride) + 1, stride):
             temp_result = 0
-            for ind in range(len(repeated_position)):
+            for ind in repeated_position:
                 """ 
                     repeated_position[ind][0]: is the weight
                     repeated_position[ind][1]: is the indexes
                 """
-                temp_result += repeated_position[ind][0] * np.sum(data[repeated_position[ind][1][0] + i,
-                                                                       repeated_position[ind][1][1] + j,
-                                                                       repeated_position[ind][1][2]])
-
+                if ind != 0:  # Zero weights
+                    temp_result += ind * np.sum(data[repeated_position[ind][0] + i,
+                                                     repeated_position[ind][1] + j,
+                                                     repeated_position[ind][2]])
+                    number_of_sum += len(repeated_position[ind][0])
+                    number_of_prod += 1
             result[i, j] = temp_result
-    return result
+    return result, number_of_sum, number_of_prod
 
-# temp = conv_factorization(k)
-# r = conv2d(a, k, temp)
-# print(r)
-
+temp, _, _ = conv_factorization(k)
+r, _, _ = conv2d(a, k, temp)
+print(r)
+# import tensorflow as tf
+#
 # tensor_a = tf.constant(a, tf.float32)
 # tensor_k = tf.constant(k, tf.float32)
-#
+# #
 # tensor_res = tf.nn.convolution(tf.reshape(tensor_a, [1, 5, 5, 5]), tf.reshape(tensor_k, [3, 3, 5, 1]), padding='VALID')
-#
+# #
 # sess = tf.Session()
 # print(sess.run(tensor_res))
 

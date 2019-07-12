@@ -2,6 +2,7 @@ from Accelerator import factorization
 import numpy as np
 import tensorflow as tf
 
+
 sess = tf.Session()
 
 input_image = np.random.random([227, 227, 3])
@@ -10,15 +11,17 @@ net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alex
                    allow_pickle=True).item()
 
 
+
 def conv_layer(input_data, key, stride=1, padding="VALID"):
     convW = np.array(net_data[key][0])
     convb = np.array(net_data[key][1])
 
     # test
+
     # convW = np.random.randint(20, size=convW.shape)
     # convb = np.random.randint(20, size=convb.shape)
-    convW = np.ones(convW.shape)
-    convb = np.ones(convb.shape)
+    # convW = np.ones(convW.shape)
+    # convb = np.ones(convb.shape)
 
     #
 
