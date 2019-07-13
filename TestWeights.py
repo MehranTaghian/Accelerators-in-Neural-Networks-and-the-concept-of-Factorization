@@ -22,8 +22,8 @@ net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alex
 # b = np.array(net_data["conv2"][1])
 # print(b.shape)
 
-for i in range(6, 9):
-    a = np.array(net_data["fc" + str(i)][0])
+for i in range(1, 6):
+    a = np.array(net_data["conv" + str(i)][1])
     print(a.shape)
 
 # a = np.array(net_data["fc6"][0])

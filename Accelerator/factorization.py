@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 
 def quantization(kernel):
@@ -8,7 +9,7 @@ def quantization(kernel):
     return quantized
 
 
-def convolve(input_data, conv_layer, bias, padding="VALID", stride=1):
+def convolve(input_data, conv_layer, bias, layer_num, padding="VALID", stride=1):
     """
 
     :param input_data: input data to the kernel
@@ -29,15 +30,18 @@ def convolve(input_data, conv_layer, bias, padding="VALID", stride=1):
     result = np.zeros(output_size)
 
     conv_layer = quantization(conv_layer)
-    for f in range(filter_num):
-        print("Filter", f)
-        kernel = conv_layer[:, :, :, f]
 
-        repeated_w, indexes, weights = conv_factorization(kernel)
-        conv_result = conv2d(input_data, kernel, repeated_w, weights, indexes, stride)
+    for f in range(filter_num):
+        kernel = conv_layer[:, :, :, f]
+        repeated_w = conv_factorization(kernel)
+        conv_result = conv2d(input_data, kernel, repeated_w, stride)
         result[:, :, f] = conv_result + bias[f]
 
         # Experimental part
+        # -----------------------------
+        print("Filter", f)
+        common = get_common_regions(input_data, kernel, repeated_w, stride)
+        write_common_regions_csv(common, 'layer-' + layer_num, f)
 
         # print("Maximum repeated weight:", max_index, "Number of repeated:", len(repeated_w[max_index][0]))
         # print("Minimum repeated weight: ", min_index, "Number of repeated:", len(repeated_w[min_index][0]))
@@ -48,6 +52,28 @@ def convolve(input_data, conv_layer, bias, padding="VALID", stride=1):
         # -----------------------------------------
 
     return result
+
+
+def write_common_regions_csv(common, layer_name, filter_num):
+    import csv
+    csv.register_dialect('myDialect', delimiter='|', quoting=csv.QUOTE_ALL)
+    if filter_num == 0:
+        with open('common-' + layer_name + '.csv', 'w') as csvfile:
+            fieldnames = ['weights', 'positions']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames, dialect="myDialect")
+            writer.writeheader()
+            for i in common:
+                key = i + ('Filter' + str(filter_num + 1),)
+                writer.writerow({'weights': key, 'positions': common[i]})
+    else:
+        with open('common-' + layer_name + '.csv', 'a') as csvfile:
+            fieldnames = ['weights', 'positions']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            for i in common:
+                key = i + ('Filter' + str(filter_num + 1),)
+                writer.writerow({'weights': key, 'positions': common[i]})
+
+    print("writing completed")
 
 
 def conv_factorization(kernel):
@@ -61,19 +87,12 @@ def conv_factorization(kernel):
     max_index: The weight whose repeated indexes are most
     min_index: The weight whose repeated indexes are least
     """
-
-    weights = np.unique(kernel)
-
-    # Experimental parameters
+    uniq = np.unique(kernel)
+    repeated_dict = {}
     max = 0
     min = np.inf
     max_index = min_index = 0
-    # --------------------------
-
-    list_indexes_size = np.zeros(len(weights), dtype=int)
-    repeated_indexes = np.zeros([np.size(kernel), 3], dtype=int)
-    counter = 0
-    for i in weights:
+    for i in uniq:
         index = np.where(kernel == i)
 
         # Experimental part
@@ -83,23 +102,15 @@ def conv_factorization(kernel):
         if len(index[0]) < min:
             min = len(index[0])
             min_index = i
-        # ------------------------------
+        # ----------------------------------
 
-        list_indexes_size[counter] = len(index[0]) + list_indexes_size[counter - 1] if counter != 0 else len(index[0])
-        # print(np.concatenate((index[0][:, np.newaxis], index[1][:, np.newaxis], index[2][:, np.newaxis]), axis=1))
-        repeated_indexes[list_indexes_size[counter - 1] if counter > 0 else 0: list_indexes_size[counter]] = \
-            np.concatenate((index[0][:, np.newaxis], index[1][:, np.newaxis], index[2][:, np.newaxis]), axis=1)
-
-        counter += 1
-    list_indexes_size = list_indexes_size[0:len(list_indexes_size) - 1]
-    return repeated_indexes, list_indexes_size, weights
+        repeated_dict[i] = index
+    return repeated_dict  # , max_index, min_index
 
 
-def conv2d(data, kernel, repeated_position, weights, indexes, stride=1):
+def conv2d(data, kernel, repeated_position, stride=1):
     """
         The kernel is 3d like in image with 3 channels RGB
-    :param weights:
-    :param indexes:
     :param data: is the actual input to convolution
     :param kernel: is the kernel of convolution e.g. a 3 by 3 kernel
     :param repeated_position: is the position of repeated weights
@@ -108,18 +119,93 @@ def conv2d(data, kernel, repeated_position, weights, indexes, stride=1):
     """
     result_size = int((data.shape[0] - kernel.shape[0]) / stride + 1)
     result = np.zeros([result_size, result_size])
-    number_of_sum = 0
-    number_of_prod = 0
-
+    number_of_sum = np.zeros(4)
+    number_of_prod = np.zeros(4)
+    number_of_memory_access = np.zeros(4)
+    size_of_zero_weights = 0
+    weights_inputs_common = {}
     for i in range(0, int((data.shape[0] - kernel.shape[0]) / stride) + 1, stride):
         for j in range(0, int((data.shape[1] - kernel.shape[1]) / stride) + 1, stride):
-            result[i, j] = np.sum(np.concatenate(weights * np.array(
-                np.split(data[repeated_position[:, 0] + i, repeated_position[:, 1] + j, repeated_position[:, 2]],
-                         indexes), dtype=object)))
+            temp_result = 0
+            for ind in repeated_position:
+                """ 
+                    repeated_position[ind][0]: is the weight
+                    repeated_position[ind][1]: is the indexes
+                """
+                if ind != 0:  # Zero weights
+                    temp_result += ind * np.sum(data[repeated_position[ind][0] + i,
+                                                     repeated_position[ind][1] + j,
+                                                     repeated_position[ind][2]])
+                    # Experimental part
+                    # mode4
+                    number_of_sum[3] += len(repeated_position[ind][0])
+                    number_of_prod[3] += 1
+                    number_of_memory_access[3] += (1  # reading weight
+                                                   +
+                                                   len(repeated_position[ind][
+                                                           0]))  # reading positions in input for that weight
+                    # -----------------------------------
+                else:
+                    size_of_zero_weights = len(repeated_position[ind][0])
 
-    return result
+                # Experimental part
+                if i == j == 0:
+                    weights_inputs_common[ind] = np.empty([0, 3])
+                weights_inputs_common[ind] = np.append(weights_inputs_common[ind], [repeated_position[ind][0] + i,
+                                                                                    repeated_position[ind][1] + j,
+                                                                                    repeated_position[ind][2]])
 
-# ----------------------------------------------------------- Experimental part
+            # mode1
+            number_of_sum[0] += np.size(kernel)
+            number_of_prod[0] += np.size(kernel)
+            number_of_memory_access[0] += 2 * np.size(kernel)
+
+            # mode2
+            number_of_sum[1] += (np.size(kernel) - size_of_zero_weights)
+            number_of_prod[1] += (np.size(kernel) - size_of_zero_weights)
+
+            # we read zero weights only for understanding that they are zero.
+            # As soon as we understood, we ignore input data of that position
+            number_of_memory_access[1] += 2 * (np.size(kernel) - size_of_zero_weights) + size_of_zero_weights
+
+            # mode3
+            # number_of_sum[3] +=
+            # -----------------------------------
+
+            result[i, j] = temp_result
+    return result, weights_inputs_common  # , number_of_sum, number_of_prod
+
+
+def get_common_regions(data, kernel, repeated_position, stride=1):
+    common = {}
+    for i in range(0, int((data.shape[0] - kernel.shape[0]) / stride) + 1, stride):
+        for j in range(0, int((data.shape[1] - kernel.shape[1]) / stride) + 1, stride):
+
+            for w1 in repeated_position:
+                for w2 in repeated_position:
+                    if w1 != w2 and ((w2, w1) not in common.keys()):
+                        common[(w1, w2)] = []
+                        data1 = data[repeated_position[w1][0] + i, repeated_position[w1][1] + j,
+                                     repeated_position[w1][2]]
+                        data2 = data[repeated_position[w2][0] + i, repeated_position[w2][1] + j,
+                                     repeated_position[w2][2]]
+
+                        for x1 in range(len(data1)):
+                            for x2 in range(len(data2)):
+                                if data1[x1] == data2[x2]:
+                                    common[(w1, w2)].append((
+                                        (repeated_position[w1][0][x1] + i, repeated_position[w1][1][x1] + j,
+                                         repeated_position[w1][2][x1]),
+                                        (repeated_position[w2][0][x2] + i, repeated_position[w2][1][x2] + j,
+                                         repeated_position[w2][2][x2])))
+
+    return common
+
+# Experimental part
+
+
+# a = np.ones([5, 5, 5])
+
 
 # a = np.array([
 #     [[1, 2, 3],
@@ -133,8 +219,7 @@ def conv2d(data, kernel, repeated_position, weights, indexes, stride=1):
 #      [1, 8, 9]]])
 
 # a = np.random.randint(5, size=(5, 5, 5))
-# k = np.random.randint(5, size=(3, 3, 5))
-
+# k = np.random.randint(5, size=(3, 3, 5, 3))
 
 # a = np.ones([5, 5, 5])
 
@@ -144,12 +229,17 @@ def conv2d(data, kernel, repeated_position, weights, indexes, stride=1):
 #               [7, 8, 9]])
 
 
-# temp, indexes, weight = conv_factorization(k)
-# r = conv2d(a, k, temp, weight, indexes)
+# k = np.array([[1, 2, 3],
+#               [4, 5, 6],
+#               [7, 8, 9]])
+
+
+# temp = conv_factorization(k)
+# r = conv2d(a, k, temp)
+# r = convolve(a, k, np.zeros([k.shape[3]]), 'conv1')
 # print(r)
 #
-# import tensorflow as tf
-#
+
 # tensor_a = tf.constant(a, tf.float32)
 # tensor_k = tf.constant(k, tf.float32)
 # #

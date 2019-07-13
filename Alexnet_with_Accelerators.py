@@ -2,14 +2,12 @@ from Accelerator import factorization
 import numpy as np
 import tensorflow as tf
 
-
 sess = tf.Session()
 
 input_image = np.random.random([227, 227, 3])
 
 net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy", "rb"), encoding="latin1",
                    allow_pickle=True).item()
-
 
 
 def conv_layer(input_data, key, stride=1, padding="VALID"):
@@ -25,7 +23,7 @@ def conv_layer(input_data, key, stride=1, padding="VALID"):
 
     #
 
-    conv_temp = factorization.convolve(input_data, convW, convb, stride=stride, padding=padding)
+    conv_temp = factorization.convolve(input_data, convW, convb, layer_num=key, stride=stride, padding=padding)
     conv_relu = tf.nn.relu(conv_temp)
     conv = sess.run(conv_relu)
     return conv
@@ -92,4 +90,3 @@ print('output')
 fc8W = np.array(net_data["fc8"][0])
 fc8b = np.array(net_data["fc8"][1])
 output = fc8.dot(fc8W) + fc8b
-
