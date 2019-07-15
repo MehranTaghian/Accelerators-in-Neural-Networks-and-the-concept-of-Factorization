@@ -28,20 +28,24 @@ print(net_data.shape)
 # a = np.array(net_data["fc6"][0])
 # print(a.shape)
 
-import requests
 
-print('Beginning file download with requests')
+nprs = np.load(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\vgg16_weights.zip")
 
-url = 'http://i3.ytimg.com/vi/J---aiyznGQ/mqdefault.jpg'
-r = requests.get(url)
 
-with open(r'C:\Users\Mehran\Desktop\mqdefault.jpg', 'wb') as f:
-    f.write(r.content)
-
-# Retrieve HTTP meta-data
-print(r.status_code)
-print(r.headers['content-type'])
-print(r.encoding)
+# import requests
+#
+# print('Beginning file download with requests')
+#
+# url = 'http://i3.ytimg.com/vi/J---aiyznGQ/mqdefault.jpg'
+# r = requests.get(url)
+#
+# with open(r'C:\Users\Mehran\Desktop\mqdefault.jpg', 'wb') as f:
+#     f.write(r.content)
+#
+# # Retrieve HTTP meta-data
+# print(r.status_code)
+# print(r.headers['content-type'])
+# print(r.encoding)
 
 # np.load("http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/bvlc_alexnet.npy", encoding="latin1")
 

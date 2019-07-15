@@ -41,6 +41,8 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
 
     for f in range(filter_num):
         kernel = conv_layer_quantized[:, :, :, f]
+        # kernel = conv_layer[:, :, :, f]
+
         print('factoring')
         repeated_w = conv_factorization(kernel)
         print('convolving')
@@ -129,9 +131,7 @@ cdef conv2d(np.ndarray data, np.ndarray kernel, dict repeated_position, int stri
     cdef:
         int result_size = int((data.shape[0] - kernel.shape[0]) / stride + 1)
         np.ndarray result = np.zeros([result_size, result_size])
-        np.ndarray number_of_sum = np.zeros(4)
-        np.ndarray number_of_prod = np.zeros(4)
-        np.ndarray number_of_memory_access = np.zeros(4)
+        int number_of_sum[4], number_of_prod[4], number_of_memory_access[4]
         int size_of_zero_weights = 0
         dict weights_inputs_common = {}
         int temp_result
@@ -145,14 +145,17 @@ cdef conv2d(np.ndarray data, np.ndarray kernel, dict repeated_position, int stri
         while j < width:
             temp_result = 0
             for ind in repeated_position:
-                """
-                    repeated_position[ind][0]: is the weight
-                    repeated_position[ind][1]: is the indexes
-                """
+                pass
+                #     """
+                #         repeated_position[ind][0]: is the weight
+                #         repeated_position[ind][1]: is the indexes
+                #     """
                 if ind != 0:  # Zero weights
-                    temp_result += ind * np.sum(data[repeated_position[ind][0] + i,
-                                                     repeated_position[ind][1] + j,
-                                                     repeated_position[ind][2]])
+                    multiply(data, repeated_position[ind], ind)
+
+                    # temp_result += ind * np.sum(data[repeated_position[ind][0] + i,
+                    #                                  repeated_position[ind][1] + j,
+                    #                                  repeated_position[ind][2]])
                     # Experimental part
                     # mode4
                     # number_of_sum[3] += len(repeated_position[ind][0])
@@ -196,6 +199,15 @@ cdef conv2d(np.ndarray data, np.ndarray kernel, dict repeated_position, int stri
             j += stride
         i += stride
     return result, weights_inputs_common  # , number_of_sum, number_of_prod
+
+cdef float multiply(np.ndarray input, tuple positions, float weight):
+    cdef:
+        int i = positions[0].shape[0]
+        float sum = 0
+    while i >= 0:
+        i -= 1
+        sum += input[positions[0][i], positions[1][i], positions[2][i]]
+    return weight * sum
 
 def get_common_regions(weights_inputs_common):
     common = {}

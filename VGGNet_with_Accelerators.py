@@ -6,8 +6,8 @@ sess = tf.Session()
 
 input_image = np.random.random([224, 224, 3])
 
-net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy", "rb"), encoding="latin1",
-                   allow_pickle=True).item()
+# net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy", "rb"), encoding="latin1",
+#                    allow_pickle=True).item()
 
 
 def conv_layer(input_data, key, stride=1, padding="VALID"):
