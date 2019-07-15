@@ -14,7 +14,8 @@
 # model = load_model(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy")
 import numpy as np
 
-net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy", "rb"), encoding="latin1", allow_pickle=True).item()
+# net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\VGG\conv2_1_W.npy", "rb"), encoding="latin1")
+net_data = np.load(open(r"..\Weights\VGG\conv1_1_W.npy", "rb"), encoding="latin1")
 
 # a = np.array(net_data["conv2"][0])
 # print(a.shape)
@@ -22,14 +23,27 @@ net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alex
 # b = np.array(net_data["conv2"][1])
 # print(b.shape)
 
-for i in range(1, 6):
-    a = np.array(net_data["conv" + str(i)][1])
-    print(a.shape)
+print(net_data.shape)
 
 # a = np.array(net_data["fc6"][0])
 # print(a.shape)
 
+import requests
 
+print('Beginning file download with requests')
+
+url = 'http://i3.ytimg.com/vi/J---aiyznGQ/mqdefault.jpg'
+r = requests.get(url)
+
+with open(r'C:\Users\Mehran\Desktop\mqdefault.jpg', 'wb') as f:
+    f.write(r.content)
+
+# Retrieve HTTP meta-data
+print(r.status_code)
+print(r.headers['content-type'])
+print(r.encoding)
+
+# np.load("http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/bvlc_alexnet.npy", encoding="latin1")
 
 
 # from __future__ import absolute_import, division, print_function, unicode_literals
@@ -45,4 +59,3 @@ for i in range(1, 6):
 # # layer(tf.ones([10, 5]))
 # # print(layer.weights)
 # print(tf.test.is_gpu_available())
-

@@ -1,6 +1,6 @@
-from Accelerator import factorization
 import numpy as np
 import tensorflow as tf
+from Accelerator_cython import factorization
 
 sess = tf.Session()
 
