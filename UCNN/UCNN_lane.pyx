@@ -13,14 +13,20 @@ class PE:
         self.accumulator2 = 0
         self.accumulator3 = 0
         self.use_accumulator3 = 0
+        self.number_of_access_to_multiplier = 0
+        self.number_of_access_to_accumulator2 = 0
+        self.number_of_access_to_accumulator3 = 0
 
     def partial_sum2(self, a):
+        self.number_of_access_to_accumulator2 += 1
         self.accumulator2 += a
 
     def partial_sum3(self, a):
+        self.number_of_access_to_accumulator3 += 1
         self.accumulator3 += a
 
     def send_to_accumulator3(self):
+        self.number_of_access_to_accumulator3 += 1
         self.accumulator3 += self.accumulator2
 
     def multiplier(self, weight, which_kernel: int):
@@ -140,11 +146,13 @@ def get_wiT2(kernel, inputs):
     #     i += 1
     return np.array(wiT2), np.array(sorted_weights)  #, np.array(remaining_weights), new_inputs2
 
-cpdef conv_single_stride(int g, np.ndarray filter1, np.ndarray filter2, np.ndarray input):
+cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray input):
     wiT1, positions1 = get_wiT1(filter1)
     wiT2, sorted_weights2 = get_wiT2(filter2, positions1)
     pe = PE()
     cdef float result1 = 0, result2 = 0
+    cdef int number_of_memory_access_input = 0, number_of_memory_access_weights = 0
+    cdef int wiT1_table_size = wiT1.shape[0], wiT2_table_size = wiT2.shape[0], input_table_size = positions1.shape[0]
 
     #-----------------------------alaki
     # cdef int j = 0
@@ -184,10 +192,13 @@ cpdef conv_single_stride(int g, np.ndarray filter1, np.ndarray filter2, np.ndarr
 
         if wiT1[i] == 0 and wiT2[i] == 0:
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
+            number_of_memory_access_input += 1
 
         elif wiT1[i] != 0 and wiT2[i] == 0:
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
+            number_of_memory_access_input += 1
             result1 += pe.multiplier(wiT1[i], 1)
+            number_of_memory_access_weights += 1
             pe.use_accumulator3 = 2
             pe.send_to_accumulator3()
             pe.accumulator2 = 0
@@ -196,6 +207,7 @@ cpdef conv_single_stride(int g, np.ndarray filter1, np.ndarray filter2, np.ndarr
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
             if sorted_weights2[weight2_index] != -1:
                 result2 += pe.multiplier(sorted_weights2[weight2_index], 2)
+                number_of_memory_access_weights += 1
             else:
                 if pe.use_accumulator3 == 2:
                     pe.accumulator3 = 0
@@ -208,9 +220,12 @@ cpdef conv_single_stride(int g, np.ndarray filter1, np.ndarray filter2, np.ndarr
 
         elif wiT1[i] != 0 and wiT2[i] != 0:
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
+            number_of_memory_access_input += 1
             result1 += pe.multiplier(wiT1[i], 1)
+            number_of_memory_access_weights += 1
             if sorted_weights2[weight2_index] != -1:
                 result2 += pe.multiplier(sorted_weights2[weight2_index], 2)
+                number_of_memory_access_weights += 1
             else:
                 if pe.use_accumulator3 == 2:
                     pe.accumulator3 = 0
@@ -223,10 +238,13 @@ cpdef conv_single_stride(int g, np.ndarray filter1, np.ndarray filter2, np.ndarr
         if wiT2[i] == 0:
             if sorted_weights2[weight2_index] != -1:  #weight is not zero
                 pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
+                number_of_memory_access_input += 1
         else:
             if sorted_weights2[weight2_index] != -1:  #weight is not zero
                 pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
                 result2 += pe.multiplier(sorted_weights2[weight2_index], 2)
+                number_of_memory_access_input += 1
+                number_of_memory_access_weights += 1
             weight2_index += 1
             pe.use_accumulator3 = 0
             pe.accumulator2 = 0
@@ -265,4 +283,6 @@ cpdef conv_single_stride(int g, np.ndarray filter1, np.ndarray filter2, np.ndarr
     result = np.zeros(2)
     result[0] = result1
     result[1] = result2
-    return result
+    return result, number_of_memory_access_weights, number_of_memory_access_input, \
+           pe.number_of_access_to_accumulator2, pe.number_of_access_to_accumulator3, \
+           pe.number_of_access_to_multiplier, wiT1_table_size, wiT2_table_size, input_table_size

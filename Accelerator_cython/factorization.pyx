@@ -31,22 +31,27 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
     :param stride:
     :return: result of convolution
     """
+    print(input_data)
     cdef int p = 0
+    cdef int i = 0
     cdef np.ndarray input_data_padded = input_data
     if padding == "SAME":
         p = int((conv_layer.shape[0] - 1) / 2)
-        input_data_padded = np.pad(input_data, p, mode="constant")
+        input_data_padded = np.zeros([input_data.shape[0] + 2 * p, input_data.shape[1] + 2 * p, input_data.shape[2]])
+        while i < input_data.shape[2]:
+            input_data_padded[:, :, i] = np.pad(input_data[:, :, i], (p, p), mode="constant")
+            i += 1
     cdef int filter_num = conv_layer.shape[3]
     cdef int output_width = int((input_data_padded.shape[0] - conv_layer.shape[0]) / stride + 1)
     cdef list output_size = [output_width, output_width, filter_num]
     cdef np.ndarray result = np.zeros(output_size)
-    cdef np.ndarray number_of_sum, number_of_prod, number_of_memory_access
+    cdef int number_of_sum, number_of_prod, number_of_memory_access
     cdef np.ndarray kernel, conv_result
     cdef np.ndarray weights, repeated
     cdef np.ndarray conv_layer_quantized = quantization(conv_layer)
     cdef dict common = {}
-    cdef int i = 0, j, k
-
+    cdef int j, k
+    i = 0
     # number_of_common_inputs is for those inputs who have n common weights where 0 <= n <= number_of_weights
     cdef np.ndarray number_of_common_inputs = np.zeros(number_of_weights, dtype=int)
 
@@ -58,12 +63,10 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
         # number_of_zeros_without_quantization = np.where(conv_layer[:, :, :, f] == 0)[0].shape[0]
         # kernel = conv_layer_quantized[:, :, :, f]
         kernel = conv_layer[:, :, :, f]
-        unique = np.unique(kernel)
-        print(len(unique))
-        print(np.where(kernel == 0)[0].shape[0])
-        print(kernel.size)
-        # print('factoring')
-        # weights, repeated = conv_factorization(kernel)
+        # unique = np.unique(kernel)
+        # print(len(unique))
+        # print(np.where(kernel == 0)[0].shape[0])
+        # print(kernel.size)
         # while i < input_data_padded.shape[0]:
         #     j = 0
         #     while j < input_data_padded.shape[1]:
@@ -74,11 +77,21 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
         #         j += 1
         #     i += 1
 
-        # print('convolving')
-
-        # conv_result, common, number_of_sum, number_of_prod, number_of_memory_access = conv2d(input_data_padded, kernel,
-        #                                                                                      repeated, weights, common,
+        print('factoring')
+        weights, repeated = conv_factorization(kernel)
+        print('convolving')
+        conv_result, common, number_of_sum, number_of_prod, number_of_memory_access = conv2d(input_data_padded,
+                                                                                             kernel,
+                                                                                             repeated, weights,
+                                                                                             common,
+                                                                                             stride)
+        # conv_result, common, number_of_sum, number_of_prod, number_of_memory_access = conv2d(input_data_padded,
+        #                                                                                      kernel,
+        #                                                                                      None, None,
+        #                                                                                      None,
         #                                                                                      stride)
+
+        write_data_to_excel(worksheet, layer_num, f, number_of_memory_access, number_of_sum, number_of_prod)
 
         # print("Calculating Unique")
         # number_of_common_inputs = np.zeros(number_of_weights)
@@ -99,7 +112,7 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
         # -----------------------------
         # # common = get_common_regions(weights_inputs_common, weights)
         print("writing...")
-        write_data_to_excel(worksheet, layer_num, f, len(unique), np.where(kernel == 0)[0].shape[0], kernel.size)
+        # write_data_to_excel(worksheet, layer_num, f, len(unique), np.where(kernel == 0)[0].shape[0], kernel.size)
         # write_number_of_uniques(number_of_common_inputs, layer_num, f)
         # write_common_regions_csv(common, 'layer-' + layer_num, f)
 
@@ -123,18 +136,17 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
     workbook.close()
     return result
 
-def write_data_to_excel(worksheet, layer_num, filter_num, number_of_unique_weights, number_of_zero_weights,
-                        kernel_size):
+def write_data_to_excel(worksheet, layer_num, filter_num, memory, sum, prod):
     if filter_num == 0:
         worksheet.write('A1', 'Filter')
-        worksheet.write('B1', '#unique weights')
-        worksheet.write('C1', 'kernel size')
-        worksheet.write('D1', '#zero weights')
+        worksheet.write('B1', '#memory_access')
+        worksheet.write('C1', '#prod')
+        worksheet.write('D1', '#sum')
 
-    worksheet.write('A' + str(filter_num + 2), f'Filter{filter_num}')
-    worksheet.write('B' + str(filter_num + 2), number_of_unique_weights)
-    worksheet.write('C' + str(filter_num + 2), kernel_size)
-    worksheet.write('D' + str(filter_num + 2), number_of_zero_weights)
+    worksheet.write('A' + str(filter_num + 2), f'{layer_num}-Filter{filter_num}')
+    worksheet.write('B' + str(filter_num + 2), memory)
+    worksheet.write('C' + str(filter_num + 2), prod)
+    worksheet.write('D' + str(filter_num + 2), sum)
 
 cdef write_number_of_uniques(np.ndarray common_inputs, str layer, int filter_num):
     cdef int i = 0
@@ -152,32 +164,6 @@ cdef write_number_of_uniques(np.ndarray common_inputs, str layer, int filter_num
             while i < size:
                 f.write(str(i) + ":" + str(common_inputs[i]) + '\n')
                 i += 1
-
-    # import csv
-    # csv.register_dialect('myDialect', delimiter=':', quoting=csv.QUOTE_ALL)
-    # # csv.register_dialect('myDialect', delimiter=':')
-    # cdef int i = 0
-    # cdef int size = common_inputs.shape[0]
-    # if filter_num == 0:
-    #     with open('result\\' + layer + '.csv', 'w') as csvfile:
-    #         # fieldnames = ['Position', 'weights']
-    #         # writer = csv.DictWriter(csvfile, fieldnames=fieldnames, dialect="myDialect")
-    #         writer = csv.writer(csvfile)
-    #         # writer.writeheader()
-    #         writer.writerow("Filter" + str(filter_num))
-    #         while i < size:
-    #             writer.writerow([i, common_inputs[i]])
-    #             i += 1
-    # else:
-    #     with open('result\\' + layer + '.csv', 'a') as csvfile:
-    #         # fieldnames = ['Position', 'weights']
-    #         # writer = csv.DictWriter(csvfile, fieldnames=fieldnames, dialect="myDialect")
-    #         writer = csv.writer(csvfile)
-    #         # writer.writeheader()
-    #         writer.writerow("Filter" + str(filter_num))
-    #         while i < size:
-    #             writer.writerow([i, common_inputs[i]])
-    #             i += 1
 
 cdef write_experiment_info_to_file(str layer, int filter_num, str mode, int number_of_sum, int number_of_prod,
                                    int number_of_memory_access):
@@ -274,10 +260,13 @@ cdef conv2d(np.ndarray data, np.ndarray kernel, np.ndarray repeated_position, np
     cdef:
         int result_size = int((data.shape[0] - kernel.shape[0]) / stride + 1)
         np.ndarray result = np.zeros([result_size, result_size])
-        np.ndarray number_of_sum = np.zeros(4, dtype=int)
-        np.ndarray number_of_prod = np.zeros(4, dtype=int)
-        np.ndarray number_of_memory_access = np.zeros(4, dtype=int)
+        # np.ndarray number_of_sum = np.zeros(4, dtype=int)
+        # np.ndarray number_of_prod = np.zeros(4, dtype=int)
+        # np.ndarray number_of_memory_access = np.zeros(4, dtype=int)
         int size_of_zero_weights = 0
+        int number_of_sum = 0
+        int number_of_prod = 0
+        int number_of_memory_access = 0
         # dict weights_inputs_common = {}
         # np.ndarray inputs_weights_common = np.zeros([data.shape[0], data.shape[1], data.shape[2], weights.shape[0]])
 
@@ -295,48 +284,119 @@ cdef conv2d(np.ndarray data, np.ndarray kernel, np.ndarray repeated_position, np
     #         temp_result = 0
     #         ind = 0
     #         while ind < weights.shape[0]:
-    while i <= (data.shape[1] - kernel.shape[1]):
+    while i < (result.shape[0]):
         j = 0
-        while j <= (data.shape[0] - kernel.shape[0]):
+        while j <= (result.shape[1]):
             ind = 0
+            # number_of_memory_access += (2 * kernel.size - np.where(kernel == 0)[0].shape[0])
+            # number_of_prod += kernel.size - np.where(kernel == 0)[0].shape[0]
+
+            # number_of_memory_access += kernel.size * 2
+            # number_of_prod += kernel.size
+            # temp_result = 0
+            # temp = np.where(kernel == 0)
+            # temp2 = np.where(
+            #     data[i * stride: i * stride + kernel.shape[0] - 1, j * stride: j * stride + kernel.shape[1] - 1,
+            #     :] == 0)
+            #
+            # number_of_zero_weights = temp[0].shape[0]
+            # number_of_zero_inputs = temp2[0].shape[0]
+            #
+            # zero_weights_pos = np.zeros([temp[0].shape[0], 3])
+            # zero_inputs_pos = np.zeros([temp2[0].shape[0], 3])
+            #
+            # zero_weights_pos[:, 0] = temp[0]
+            # zero_weights_pos[:, 1] = temp[1]
+            # zero_weights_pos[:, 2] = temp[2]
+            #
+            # zero_inputs_pos[:, 0] = temp2[0]
+            # zero_inputs_pos[:, 1] = temp2[1]
+            # zero_inputs_pos[:, 2] = temp2[2]
+
+            # zero_inputs_pos -= [i * stride, j * stride, 0]
+            # print(f'zero input:{zero_inputs_pos}')
+            # print(f'zero weights:{zero_weights_pos}')
+
+            # number_of_both_zeros = 0
+            # we = 0
+            # inp = 0
+            # while we < zero_weights_pos.shape[0]:
+            #     inp = 0
+            #     while inp < zero_inputs_pos.shape[0]:
+            #         if (zero_weights_pos[we, :] == zero_inputs_pos[inp, :]).all():
+            #             number_of_both_zeros += 1
+            #         inp += 1
+            #     we += 1
+            # if zero_inputs_pos.shape[0] > 0 and zero_weights_pos.shape[0] > 0:
+            #     number_of_both_zeros = len(intersect_along_first_axis(zero_weights_pos, zero_inputs_pos))
+
+            # number_of_sum += kernel.size - (number_of_zero_inputs + number_of_zero_weights - number_of_both_zeros)
+            # number_of_prod += kernel.size - (number_of_zero_inputs + number_of_zero_weights - number_of_both_zeros)
+            # number_of_memory_access += 2 * (
+            #         kernel.size - (number_of_zero_inputs + number_of_zero_weights - number_of_both_zeros))
+
             while ind < weights.shape[0]:
+                if weights[ind] != 0:
+                    number_of_memory_access += 1 + repeated_position[ind].shape[0]
+                    number_of_sum += repeated_position[ind].shape[0]
+                    if repeated_position[ind].shape[0]:
+                        number_of_sum += 1
+                    #count number of zero inputs:
+                    # print(data[int(repeated_position[ind][:, 0]), int(repeated_position[ind][:, 1]), int(repeated_position[ind][:, 2])])
+                    # indexes = np.array(repeated_position[ind], dtype=int)
+                    # p = 0
+                    #
+                    # while p < indexes.shape[0]:
+                    #     if indexes[p, 0] + i * stride >= data.shape[0] or indexes[p, 1] + j * stride >= data.shape[1]:
+                    #         indexes = np.delete(indexes, p, axis=0)
+                    #     else:
+                    #         p += 1
+                    #
+                    # number_of_zero_inputs = np.where(
+                    #     data[indexes[:, 0] + i * stride, indexes[:, 1] + j * stride, indexes[:, 2]] == 0)[0].shape[0]
+                    # number_of_memory_access -= number_of_zero_inputs
+                    # number_of_sum += repeated_position[ind].shape[0] - number_of_zero_inputs
+                    # number_of_sum += repeated_position[ind].shape[0]
+                    # number_of_sum += 1  #sum weight with other weights in global
+            # if weights[ind] != 0:
+            # number_of_prod += 1
+            # number_of_sum += repeated_position[ind].shape[0]
+            #     # mode4
+            #     input_size = repeated_position[ind].shape[0]
+            #     number_of_sum[3] += input_size
+            #     number_of_prod[3] += 1
+            #     number_of_memory_access[3] += input_size + 1
+            #     # -----------------------------------
+            # else:
+            #     size_of_zero_weights = repeated_position[ind].shape[0]
 
-                # if weights[ind] != 0:
-                #     # mode4
-                #     input_size = repeated_position[ind].shape[0]
-                #     number_of_sum[3] += input_size
-                #     number_of_prod[3] += 1
-                #     number_of_memory_access[3] += input_size + 1
-                #     # -----------------------------------
-                # else:
-                #     size_of_zero_weights = repeated_position[ind].shape[0]
+            # Convolution inside the kernel
+            # if weights[ind] != 0:  # Zero weights
+            #     temp_result += multiply(data, repeated_position[ind], weights[ind], i, j)
 
-                # Convolution inside the kernel
-                # if weights[ind] != 0:  # Zero weights
-                #     temp_result += multiply(data, repeated_position[ind], weights[ind], i, j)
+            #---------------------------------------------------------------------
+            #Expeimental part 3 for common as parameter---------------------------
+            # key = 0
+            # if weights.shape[0] > 1:
+            #     keys = list(map(tuple, repeated_position[ind] + [i, j, 0]))
+            #     while key < len(keys):
+            #         common[keys[key]] += [weights[ind]]
+            #         key += 1
+            # else:
+            #     keys = list(map(tuple, repeated_position + [i, j, 0]))
+            #     while key < len(keys):
+            #         common[keys[key]] += [weights[ind]]
+            #         key += 1
+            #---------------------------------------------------------------------
 
-                #---------------------------------------------------------------------
-                #Expeimental part 3 for common as parameter---------------------------
-                key = 0
-                if weights.shape[0] > 1:
-                    keys = list(map(tuple, repeated_position[ind] + [i, j, 0]))
-                    while key < len(keys):
-                        common[keys[key]] += [weights[ind]]
-                        key += 1
-                else:
-                    keys = list(map(tuple, repeated_position + [i, j, 0]))
-                    while key < len(keys):
-                        common[keys[key]] += [weights[ind]]
-                        key += 1
-                #---------------------------------------------------------------------
-
-                # np.append(weights_inputs_common[ind],
-                #           np.concatenate(
-                #               ((repeated_position[ind][:, 0] + i)[np.newaxis],
-                #                (repeated_position[ind][:, 1] + j)[np.newaxis],
-                #                (repeated_position[ind][:, 2])[np.newaxis]),
-                #               axis=0).T, axis=0)
+            # np.append(weights_inputs_common[ind],
+            #           np.concatenate(
+            #               ((repeated_position[ind][:, 0] + i)[np.newaxis],
+            #                (repeated_position[ind][:, 1] + j)[np.newaxis],
+            #                (repeated_position[ind][:, 2])[np.newaxis]),
+            #               axis=0).T, axis=0)
                 ind += 1
+                number_of_prod += 1
 
             # # mode1
             # number_of_sum[0] += np.size(kernel)
@@ -349,8 +409,8 @@ cdef conv2d(np.ndarray data, np.ndarray kernel, np.ndarray repeated_position, np
             # number_of_memory_access[2] += 2 * (np.size(kernel) - size_of_zero_weights)
 
             # result[i, j] = temp_result
-            j += stride
-        i += stride
+            j += 1
+        i += 1
 
         #this part for i and j are for result
         #     j += 1
@@ -384,8 +444,8 @@ cdef get_common_regions(weights_inputs_common, weights):
 
 cpdef np.ndarray intersect_along_first_axis(a, b):
     # check that casting to void will create equal size elements
-    # assert a.shape[1:] == b.shape[1:]
-    # assert a.dtype == b.dtype
+    assert a.shape[1:] == b.shape[1:]
+    assert a.dtype == b.dtype
 
     # compute dtypes
     void_dt = np.dtype((np.void, a.dtype.itemsize * np.prod(a.shape[1:])))
