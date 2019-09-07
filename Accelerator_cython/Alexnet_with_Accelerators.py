@@ -13,21 +13,30 @@ input_image = np.array(sess.run(input_image))
 
 # net_data = np.load(open("bvlc_alexnet.npy", "rb"), encoding="latin1",
 #                    allow_pickle=True).item()
-weight, bias = get_weights('../alex_net')
+# weight, bias = get_weights('../alex_net')
+
+net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\AlexNet_quantized_weights_4.pickle", "rb"),
+                   encoding="latin1",
+                   allow_pickle=True)
 
 
 def conv_layer(input_data, key, group=1, stride=1, padding="VALID"):
     # convW = np.array(net_data[key][0])
     # convb = np.array(net_data[key][1])
-    convW = np.array(weight[f'conv{key}'], dtype=np.float32)
-    convb = np.array(bias[f'b{key}'], dtype=np.float32)
-    convW = convW.reshape([convW.shape[2], convW.shape[3], convW.shape[1], convW.shape[0]])
-    print(convW.shape)
+    # convW = np.array(weight[f'conv{key}'], dtype=np.float32)
+    # convb = np.array(bias[f'b{key}'], dtype=np.float32)
+    # convW = convW.reshape([convW.shape[2], convW.shape[3], convW.shape[1], convW.shape[0]])
+    # print(convW.shape)
+
+    convW = np.array(net_data[f'convolution_{key}'], dtype=np.float32)
+    convb = np.array(net_data[f'bias_{key}'], dtype=np.float32)
+
     # input_data_numpy = np.array(input_data.eval(session=sess))
     input_data_factorization = input_data.copy()
     input_data_factorization = input_data_factorization.reshape(
         [input_data.shape[1], input_data.shape[2], input_data.shape[3]])
-    factorization.convolve(input_data_factorization, convW, convb, layer_num=f'conv{key}', stride=stride, padding=padding)
+    factorization.convolve(input_data_factorization, convW, convb, layer_num=f'convolution_{key}', stride=stride,
+                           padding=padding)
 
     kernel = tf.constant(convW, tf.float32)
     biases = tf.constant(convb, tf.float32)
@@ -111,20 +120,42 @@ fc6 = maxpool5.reshape(-1)
 print('layer7')
 # fc6W = np.array(net_data["fc6"][0])
 # fc6b = np.array(net_data["fc6"][1])
-fc6W = np.array(weight["fc6"].T)
-fc6b = np.array(bias["b6"])
+fc6W = np.array(net_data["fc_1"].T)
+fc6b = np.array(net_data["fc_1_bias"])
 fc7 = fc6.dot(fc6W) + fc6b
 
 # layer 8 fc
 print('layer8')
 # fc7W = np.array(net_data["fc7"][0])
 # fc7b = np.array(net_data["fc7"][1])
-fc7W = np.array(weight["fc7"].T)
-fc7b = np.array(bias["b7"])
+fc7W = np.array(net_data["fc_2"].T)
+fc7b = np.array(net_data["fc_2_bias"])
 fc8 = fc7.dot(fc7W) + fc7b
 
 # output
 print('output')
-fc8W = np.array(weight["fc8"].T)
-fc8b = np.array(bias["b8"])
+fc8W = np.array(net_data["fc_3"].T)
+fc8b = np.array(net_data["fc_3_bias"])
 output = fc8.dot(fc8W) + fc8b
+
+# # layer 7 fc
+# print('layer7')
+# # fc6W = np.array(net_data["fc6"][0])
+# # fc6b = np.array(net_data["fc6"][1])
+# fc6W = np.array(weight["fc6"].T)
+# fc6b = np.array(bias["b6"])
+# fc7 = fc6.dot(fc6W) + fc6b
+#
+# # layer 8 fc
+# print('layer8')
+# # fc7W = np.array(net_data["fc7"][0])
+# # fc7b = np.array(net_data["fc7"][1])
+# fc7W = np.array(weight["fc7"].T)
+# fc7b = np.array(bias["b7"])
+# fc8 = fc7.dot(fc7W) + fc7b
+#
+# # output
+# print('output')
+# fc8W = np.array(weight["fc8"].T)
+# fc8b = np.array(bias["b8"])
+# output = fc8.dot(fc8W) + fc8b

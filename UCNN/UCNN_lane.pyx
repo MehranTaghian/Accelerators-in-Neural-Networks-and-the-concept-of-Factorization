@@ -36,6 +36,7 @@ class PE:
         :param which_kernel: 1 for kernel wiT1 and 2 for kernel wiT2
         :return:
         """
+        self.number_of_access_to_multiplier += 1
         if which_kernel == 1:
             if self.use_accumulator3 == 1:
                 result = weight * (self.accumulator2 + self.accumulator3)
@@ -153,7 +154,7 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
     cdef float result1 = 0, result2 = 0
     cdef int number_of_memory_access_input = 0, number_of_memory_access_weights = 0
     cdef int wiT1_table_size = wiT1.shape[0], wiT2_table_size = wiT2.shape[0], input_table_size = positions1.shape[0]
-
+    cdef int access_input_buffer = 0, access_weight_buffer = 0, access_partial_sum_buffer = 0
     #-----------------------------alaki
     # cdef int j = 0
     # print(wiT1)
@@ -190,6 +191,9 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
     weight2_index = 0
     while i < wiT1.shape[0]:
 
+        access_weight_buffer += 2
+        access_input_buffer += 1
+
         if wiT1[i] == 0 and wiT2[i] == 0:
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
             number_of_memory_access_input += 1
@@ -197,7 +201,10 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
         elif wiT1[i] != 0 and wiT2[i] == 0:
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
             number_of_memory_access_input += 1
+
             result1 += pe.multiplier(wiT1[i], 1)
+            access_partial_sum_buffer += 1
+
             number_of_memory_access_weights += 1
             pe.use_accumulator3 = 2
             pe.send_to_accumulator3()
@@ -207,6 +214,8 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
             if sorted_weights2[weight2_index] != -1:
                 result2 += pe.multiplier(sorted_weights2[weight2_index], 2)
+                access_partial_sum_buffer += 1
+
                 number_of_memory_access_weights += 1
             else:
                 if pe.use_accumulator3 == 2:
@@ -221,10 +230,15 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
         elif wiT1[i] != 0 and wiT2[i] != 0:
             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
             number_of_memory_access_input += 1
+
             result1 += pe.multiplier(wiT1[i], 1)
+            access_partial_sum_buffer += 1
+
             number_of_memory_access_weights += 1
             if sorted_weights2[weight2_index] != -1:
                 result2 += pe.multiplier(sorted_weights2[weight2_index], 2)
+                access_partial_sum_buffer += 1
+
                 number_of_memory_access_weights += 1
             else:
                 if pe.use_accumulator3 == 2:
@@ -235,6 +249,9 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
 
         i += 1
     while i < wiT2.shape[0]:
+        access_weight_buffer += 1
+        access_input_buffer += 1
+
         if wiT2[i] == 0:
             if sorted_weights2[weight2_index] != -1:  #weight is not zero
                 pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
@@ -242,7 +259,10 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
         else:
             if sorted_weights2[weight2_index] != -1:  #weight is not zero
                 pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
+
                 result2 += pe.multiplier(sorted_weights2[weight2_index], 2)
+                access_partial_sum_buffer += 1
+
                 number_of_memory_access_input += 1
                 number_of_memory_access_weights += 1
             weight2_index += 1
@@ -250,39 +270,10 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
             pe.accumulator2 = 0
         i += 1
 
-    # if size == wiT1.shape[0]:
-    #     print('yes')
-    #     while i < wiT2.shape[0]:s
-    #         temp = input[positions2[i][0], positions2[i][1], positions2[i][2]]
-    #         if pe.use_accumulator3 == 2:
-    #             temp += pe.accumulator3
-    #             pe.accumulator3 = 0
-    #             pe.use_accumulator3 = 0
-    #         result2 += wiT2[i] * temp
-    #         i += 1
-    # else:
-    #     while i < positions1.shape[0]:
-    #         pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
-    #         while wiT1[i] == 0:
-    #             i += 1
-    #             pe.partial_sum2(input[positions1[i][0], positions1[i][1], positions1[i][2]])
-    #         result1 += pe.multiplier(wiT1[i], 1)
-    #         pe.accumulator2 = 0
-    #         i += 1
-    # print(positions1)
-    # print(remaining_wiT2)
-    # print(positions2)
-    # if remaining_wiT2.shape[0] > 0:
-    #     counter = wiT2.shape[0]
-    #     i = 0
-    #     while i < remaining_wiT2.shape[0]:
-    #         result2 += remaining_wiT2[i] * input[positions2[counter][0], positions2[counter][1], positions2[counter][2]]
-    #         counter += 1
-    #         print(counter < positions2.shape[0])
-    #         i += 1
     result = np.zeros(2)
     result[0] = result1
     result[1] = result2
     return result, number_of_memory_access_weights, number_of_memory_access_input, \
            pe.number_of_access_to_accumulator2, pe.number_of_access_to_accumulator3, \
-           pe.number_of_access_to_multiplier, wiT1_table_size, wiT2_table_size, input_table_size
+           pe.number_of_access_to_multiplier, wiT1_table_size, wiT2_table_size, input_table_size, \
+           access_input_buffer, access_weight_buffer, access_partial_sum_buffer

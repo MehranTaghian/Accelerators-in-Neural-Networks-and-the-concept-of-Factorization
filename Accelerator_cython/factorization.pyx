@@ -57,14 +57,19 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
 
     workbook = excel.Workbook(f'result\\{layer_num}.xlsx')
     worksheet = workbook.add_worksheet(layer_num)
+    unique_weights_in_kernel = np.unique(conv_layer)
 
     for f in range(filter_num):
         print("Filter", f)
         # number_of_zeros_without_quantization = np.where(conv_layer[:, :, :, f] == 0)[0].shape[0]
         # kernel = conv_layer_quantized[:, :, :, f]
         kernel = conv_layer[:, :, :, f]
-        # unique = np.unique(kernel)
-        # print(len(unique))
+        unique = {}
+        for u in unique_weights_in_kernel:
+            unique[u] = np.where(kernel == u)[0].shape[0]
+
+        write_unique_to_excel(worksheet, layer_num, f, unique)
+
         # print(np.where(kernel == 0)[0].shape[0])
         # print(kernel.size)
         # while i < input_data_padded.shape[0]:
@@ -77,21 +82,21 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
         #         j += 1
         #     i += 1
 
-        print('factoring')
-        weights, repeated = conv_factorization(kernel)
-        print('convolving')
-        conv_result, common, number_of_sum, number_of_prod, number_of_memory_access = conv2d(input_data_padded,
-                                                                                             kernel,
-                                                                                             repeated, weights,
-                                                                                             common,
-                                                                                             stride)
+        # print('factoring')
+        # weights, repeated = conv_factorization(kernel)
+        # print('convolving')
+        # conv_result, common, number_of_sum, number_of_prod, number_of_memory_access = conv2d(input_data_padded,
+        #                                                                                      kernel,
+        #                                                                                      repeated, weights,
+        #                                                                                      common,
+        #                                                                                      stride)
         # conv_result, common, number_of_sum, number_of_prod, number_of_memory_access = conv2d(input_data_padded,
         #                                                                                      kernel,
         #                                                                                      None, None,
         #                                                                                      None,
         #                                                                                      stride)
 
-        write_data_to_excel(worksheet, layer_num, f, number_of_memory_access, number_of_sum, number_of_prod)
+        # write_data_to_excel(worksheet, layer_num, f, number_of_memory_access, number_of_sum, number_of_prod)
 
         # print("Calculating Unique")
         # number_of_common_inputs = np.zeros(number_of_weights)
@@ -135,6 +140,20 @@ cpdef np.ndarray convolve(np.ndarray input_data, np.ndarray conv_layer, np.ndarr
 
     workbook.close()
     return result
+
+def write_unique_to_excel(worksheet, layer_num, filter_num, unique):
+    if filter_num == 0:
+        worksheet.write('A1', 'Filter')
+        i = 66
+        for k in unique:
+            worksheet.write(f'{chr(i)}1', k)
+            i += 1
+
+    worksheet.write('A' + str(filter_num + 2), f'{layer_num}-Filter{filter_num}')
+    i = 66
+    for k in unique:
+        worksheet.write(f'{chr(i)}{str(filter_num + 2)}', unique[k])
+        i += 1
 
 def write_data_to_excel(worksheet, layer_num, filter_num, memory, sum, prod):
     if filter_num == 0:
@@ -358,43 +377,43 @@ cdef conv2d(np.ndarray data, np.ndarray kernel, np.ndarray repeated_position, np
                     # number_of_sum += repeated_position[ind].shape[0] - number_of_zero_inputs
                     # number_of_sum += repeated_position[ind].shape[0]
                     # number_of_sum += 1  #sum weight with other weights in global
-            # if weights[ind] != 0:
-            # number_of_prod += 1
-            # number_of_sum += repeated_position[ind].shape[0]
-            #     # mode4
-            #     input_size = repeated_position[ind].shape[0]
-            #     number_of_sum[3] += input_size
-            #     number_of_prod[3] += 1
-            #     number_of_memory_access[3] += input_size + 1
-            #     # -----------------------------------
-            # else:
-            #     size_of_zero_weights = repeated_position[ind].shape[0]
+                # if weights[ind] != 0:
+                # number_of_prod += 1
+                # number_of_sum += repeated_position[ind].shape[0]
+                #     # mode4
+                #     input_size = repeated_position[ind].shape[0]
+                #     number_of_sum[3] += input_size
+                #     number_of_prod[3] += 1
+                #     number_of_memory_access[3] += input_size + 1
+                #     # -----------------------------------
+                # else:
+                #     size_of_zero_weights = repeated_position[ind].shape[0]
 
-            # Convolution inside the kernel
-            # if weights[ind] != 0:  # Zero weights
-            #     temp_result += multiply(data, repeated_position[ind], weights[ind], i, j)
+                # Convolution inside the kernel
+                # if weights[ind] != 0:  # Zero weights
+                #     temp_result += multiply(data, repeated_position[ind], weights[ind], i, j)
 
-            #---------------------------------------------------------------------
-            #Expeimental part 3 for common as parameter---------------------------
-            # key = 0
-            # if weights.shape[0] > 1:
-            #     keys = list(map(tuple, repeated_position[ind] + [i, j, 0]))
-            #     while key < len(keys):
-            #         common[keys[key]] += [weights[ind]]
-            #         key += 1
-            # else:
-            #     keys = list(map(tuple, repeated_position + [i, j, 0]))
-            #     while key < len(keys):
-            #         common[keys[key]] += [weights[ind]]
-            #         key += 1
-            #---------------------------------------------------------------------
+                #---------------------------------------------------------------------
+                #Expeimental part 3 for common as parameter---------------------------
+                # key = 0
+                # if weights.shape[0] > 1:
+                #     keys = list(map(tuple, repeated_position[ind] + [i, j, 0]))
+                #     while key < len(keys):
+                #         common[keys[key]] += [weights[ind]]
+                #         key += 1
+                # else:
+                #     keys = list(map(tuple, repeated_position + [i, j, 0]))
+                #     while key < len(keys):
+                #         common[keys[key]] += [weights[ind]]
+                #         key += 1
+                #---------------------------------------------------------------------
 
-            # np.append(weights_inputs_common[ind],
-            #           np.concatenate(
-            #               ((repeated_position[ind][:, 0] + i)[np.newaxis],
-            #                (repeated_position[ind][:, 1] + j)[np.newaxis],
-            #                (repeated_position[ind][:, 2])[np.newaxis]),
-            #               axis=0).T, axis=0)
+                # np.append(weights_inputs_common[ind],
+                #           np.concatenate(
+                #               ((repeated_position[ind][:, 0] + i)[np.newaxis],
+                #                (repeated_position[ind][:, 1] + j)[np.newaxis],
+                #                (repeated_position[ind][:, 2])[np.newaxis]),
+                #               axis=0).T, axis=0)
                 ind += 1
                 number_of_prod += 1
 
