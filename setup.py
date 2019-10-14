@@ -5,4 +5,4 @@ import numpy
 
 setup(ext_modules=(cythonize(Extension("factorization", ["Accelerator_cython\\factorization.pyx"]))),
       include_dirs=[numpy.get_include()],
-      requires=['numpy', 'Cython', 'tensorflow', 'xlsxwriter'])
+      requires=['numpy', 'Cython', 'tensorflow', 'xlsxwriter', 'open'])
