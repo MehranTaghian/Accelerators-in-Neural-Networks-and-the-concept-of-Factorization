@@ -7,7 +7,6 @@ from zipfile import ZipFile
 from zipfile import ZIP_DEFLATED
 import csv
 import os
-import xlsxwriter as excel
 
 cdef np.ndarray quantization(np.ndarray kernel, int number_of_weights = 16):
     cdef:

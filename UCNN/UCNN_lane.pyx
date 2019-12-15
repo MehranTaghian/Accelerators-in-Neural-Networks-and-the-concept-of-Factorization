@@ -55,6 +55,12 @@ class PE:
 
 
 def remove_zero_weights(weights, inputs, indices):
+    """
+    :param weights: weights of the kernel
+    :param inputs: numbers in the input data
+    :param indices: indices for each weight that would be multiplied to the input data
+    :return: weights and inputs and indices without zero weights
+    """
     if np.where(weights == 0)[0].shape[0] > 0:
         index = int(np.where(weights == 0)[0])
         new_indices = np.zeros(indices.shape[0] - 1, dtype=int)
@@ -81,14 +87,7 @@ def remove_zero_weights(weights, inputs, indices):
 def get_wiT1(kernel):
     # print(kernel)
     weights, inputs, indices = conv_factorization(kernel)
-    # print('indices1:', indices[0])
-    # print('inputs before', inputs)
-    # print(weights)
-    # print(indices)
     weights, inputs, indices, len_non_zeros = remove_zero_weights(weights, inputs, indices)
-    # print('inputs after', inputs)
-    # print(weights)
-    # print(indices)
 
     wiT1 = np.zeros(len_non_zeros, dtype=int)
     wiT1[indices - 1] = weights
@@ -109,11 +108,6 @@ def get_wiT2(kernel, inputs):
         # flag += np.all(inputs2 == inputs[i], axis=1)
         temp = np.where(np.all(inputs2 == inputs[i], axis=1))[0]
         index = temp[0]
-        # if temp.shape[0] != 0:
-        #     index = temp[0]
-        # else:
-        #     i += 1
-        #     continue
         j = 0
         while index >= indices[j]:
             j += 1
@@ -134,20 +128,16 @@ def get_wiT2(kernel, inputs):
         i += 1
     i = 0
     j = 0
-    # remaining_weights = []
-    # while i < inputs2.shape[0]:
-    #     if flag[i] == 0:  # meaning that it wasn't added in the previous loop
-    #         new_inputs2[counter] = inputs2[i]
-    #         counter += 1
-    #         j = 0
-    #         while i >= indices[j]:
-    #             j += 1
-    #         # wiT2[counter] = weights[j]
-    #         remaining_weights.append(weights[j])
-    #     i += 1
     return np.array(wiT2), np.array(sorted_weights)  #, np.array(remaining_weights), new_inputs2
 
 cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray input):
+    """
+    This function takes 2 filters and calculates the result of a single stride in convolving
+    :param filter1: First kernel
+    :param filter2: Second Kernel
+    :param input: input data
+    :return: output of the convolution
+    """
     wiT1, positions1 = get_wiT1(filter1)
     wiT2, sorted_weights2 = get_wiT2(filter2, positions1)
     pe = PE()
@@ -155,37 +145,7 @@ cpdef conv_single_stride(np.ndarray filter1, np.ndarray filter2, np.ndarray inpu
     cdef int number_of_memory_access_input = 0, number_of_memory_access_weights = 0
     cdef int wiT1_table_size = wiT1.shape[0], wiT2_table_size = wiT2.shape[0], input_table_size = positions1.shape[0]
     cdef int access_input_buffer = 0, access_weight_buffer = 0, access_partial_sum_buffer = 0
-    #-----------------------------alaki
-    # cdef int j = 0
-    # print(wiT1)
-    # while j < wiT1.shape[0]:
-    #     temp = 0
-    #     while wiT1[j] == 0:
-    #         # print(input[positions1[j][0], positions1[j][1], positions1[j][2]])
-    #         temp += input[positions1[j][0], positions1[j][1], positions1[j][2]]
-    #         j += 1
-    #     temp += input[positions1[j][0], positions1[j][1], positions1[j][2]]
-    #     result1 += temp * wiT1[j]
-    #     j += 1
-    # print(result1)
-    # result1 = 0
-    # j = 0
-    # print(wiT2)
-    # while j < wiT2.shape[0]:
-    #     temp = 0
-    #     while wiT2[j] == 0:
-    #         # print([positions2[j][0], positions2[j][1], positions2[j][2]])
-    #         temp += input[positions2[j][0], positions2[j][1], positions2[j][2]]
-    #         j += 1
-    #     # print([positions2[j][0], positions2[j][1], positions2[j][2]])
-    #     temp += input[positions2[j][0], positions2[j][1], positions2[j][2]]
-    #     result2 += temp * wiT2[j]
-    #     j += 1
-    # print(result2)
-    # result1 = 0
-    # result2 = 0
-    # ---------------------------------------
-    # print('wiT1', wiT1)
+
     cdef int i = 0
     # size = wiT1.shape[0] if wiT1.shape[0] < wiT2.shape[0] else wiT2.shape[0]
     weight2_index = 0

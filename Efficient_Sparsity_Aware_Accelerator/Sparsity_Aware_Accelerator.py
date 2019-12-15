@@ -151,6 +151,16 @@ def conv2d(data, filter, exp_params, stride=1):
 
 
 def convolution(worksheet, data, kernel, bias, layer_num, stride=1, padding="VALID"):
+    """
+    :param worksheet: For saving the result data into an excel file
+    :param data: input data for convolution
+    :param kernel:
+    :param bias: bias of each neuron
+    :param layer_num: which layer of the Deep Neural Network(say alexnet)
+    :param stride: number of stride
+    :param padding:number of padding
+    :return: result of the convolution
+    """
     exp = ExperimentalParameters()
     exp.size_of_global_buffer = data.size
     exp.utilized_size_of_global_buffer = data.size - np.where(data == 0)[0].shape[0]
