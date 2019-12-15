@@ -13,12 +13,44 @@ input_image = np.array(sess.run(input_image))
 
 # net_data = np.load(open("bvlc_alexnet.npy", "rb"), encoding="latin1",
 #                    allow_pickle=True).item()
-net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\AlexNet_quantized_weights_4.pickle", "rb"),
-                   encoding="latin1",
-                   allow_pickle=True)
+# net_data = np.load(open(r"C:\Users\Mehran\Desktop\Desktop files\Lotfi-Kamran\Weights\AlexNet_quantized_weights_4.pickle", "rb"),
+#                    encoding="latin1",
+#                    allow_pickle=True)
+
+
+def weight_preprocess(weight_dict):
+    new_weight_dict = {}
+    val = list(weight_dict.values())
+    index = 1
+    for i in range(0, len(val), 2):
+        print(val[i].shape)
+        print(val[i + 1].shape)
+
+        new_weight_dict[f'convolution_{index}'] = val[i]
+        new_weight_dict[f'bias_{index}'] = val[i + 1]
+        index += 1
+
+    return new_weight_dict
+
+
+net_data = np.load(
+    open(r"C:\Users\Mehran\Desktop\Desktop files\Lotfi-Kamran\Weights\INQ_AlexNet_quantized_weights_0.6753.pickle",
+         "rb"),
+    encoding="latin1",
+    allow_pickle=True)
+
+net_data = weight_preprocess(net_data)
 
 book = Workbook()
 worksheet = book.active
+
+
+def convert_to_8bits(input32bits):
+    r_max = np.max(input32bits)
+    r_min = np.min(input32bits)
+    converted = np.int8(256 / (r_max - r_min) * input32bits)
+    return converted
+
 
 def conv_layer(input_data, key, stride=1, padding="VALID"):
     # convW = np.array(net_data[key][0])
@@ -28,16 +60,20 @@ def conv_layer(input_data, key, stride=1, padding="VALID"):
     # convW = convW.reshape([convW.shape[2], convW.shape[3], convW.shape[1], convW.shape[0]])
 
     # input_data_numpy = np.array(input_data.eval(session=sess))
-    input_data_for_UCNN = input_data.copy()
-    input_data_for_UCNN = input_data_for_UCNN.reshape(
+    input_data_for_ESAA = input_data.copy()
+    input_data_for_ESAA = input_data_for_ESAA.reshape(
         [input_data.shape[1], input_data.shape[2], input_data.shape[3]])
-    convolution(worksheet, input_data_for_UCNN, convW, convb, layer_num=key, stride=stride, padding=padding)
+
+    # input_data_for_ESAA = convert_to_8bits(input_data_for_ESAA)
+    input_data_ESAA = input_data_for_ESAA.astype(np.float16)
+
+    convolution(worksheet, input_data_for_ESAA, convW, convb, layer_num=key, stride=stride, padding=padding)
 
     kernel = tf.constant(convW, tf.float32)
     biases = tf.constant(convb, tf.float32)
     temp1 = tf.nn.convolution(input_data, kernel, padding, [1, stride, stride, 1])
-    temp2 = tf.nn.relu(temp1)
-    result = tf.nn.bias_add(temp2, biases)
+    temp2 = tf.nn.bias_add(temp1, biases)
+    result = tf.nn.relu(temp2)
     return sess.run(result)
 
 
@@ -91,7 +127,7 @@ maxpool5_temp = tf.nn.max_pool(conv5,
 maxpool5 = sess.run(maxpool5_temp)
 maxpool5 = maxpool5.reshape([maxpool5.shape[1], maxpool5.shape[2], maxpool5.shape[3]])
 
-book.save('alex_net_result_for_ESAA.xlsx')
+book.save('result\\alex_net_result_for_ESAA.xlsx')
 
 print('conv5.shape', conv5.shape)
 print('pool5.shape', maxpool5.shape)

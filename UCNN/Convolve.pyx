@@ -59,7 +59,23 @@ cpdef conv2d(np.ndarray data, np.ndarray filter1, np.ndarray filter2, int stride
            number_of_access_to_multiplier, wiT1_table_size, wiT2_table_size, input_table_size, \
            access_input_buffer, access_weight_buffer, access_partial_sum_buffer
 
-def convolution(data, kernel, bias, layer_num, stride=1, padding="VALID"):
+
+class Experiment:
+    def __init__(self):
+        self.n_memory_access_weights = 0
+        self.n_memory_access_inputs = 0
+        self.n_access_to_multiplier = 0
+        self.n_access_to_accumulator2 = 0
+        self.n_access_to_accumulator3 = 0
+        self.size_of_wiT1 = 0
+        self.size_of_wiT2 = 0
+        self.size_of_input_table = 0
+        self.access_input_buffer = 0
+        self.access_weight_buffer = 0
+        self.access_partial_sum_buffer = 0
+
+
+def convolution(general_worksheet, data, kernel, bias, layer_num, stride=1, padding="VALID"):
     input_data_padded = data
     if padding == "SAME":
         p = int((kernel.shape[0] - 1) / 2)
@@ -70,8 +86,10 @@ def convolution(data, kernel, bias, layer_num, stride=1, padding="VALID"):
     output_width = int((input_data_padded.shape[0] - kernel.shape[0]) / stride + 1)
     output_size = [output_width, output_width, filter_num]
     result = np.zeros(output_size)
-    workbook = excel.Workbook(f'result\\{layer_num}.xlsx')
-    worksheet = workbook.add_worksheet(layer_num)
+    workbook = excel.Workbook(f'result\\convolution_{layer_num}.xlsx')
+    worksheet = workbook.add_worksheet(f'convolution_{layer_num}')
+    experiment = Experiment()
+
     for i in range(0, filter_num, 2):
         result[:, :, i: i + 2], number_of_memory_access_weights, number_of_memory_access_input, \
         number_of_access_to_accumulator2, number_of_access_to_accumulator3, \
@@ -80,13 +98,35 @@ def convolution(data, kernel, bias, layer_num, stride=1, padding="VALID"):
                                                                                       kernel[:, :, :, i],
                                                                                       kernel[:, :, :,
                                                                                       i + 1], stride)
+
+        experiment.n_memory_access_weights += number_of_memory_access_weights
+        experiment.n_memory_access_inputs += number_of_memory_access_input
+        experiment.n_access_to_multiplier += number_of_access_to_multiplier
+        experiment.n_access_to_accumulator2 += number_of_access_to_accumulator2
+        experiment.n_access_to_accumulator3 += number_of_access_to_accumulator3
+        experiment.size_of_wiT1 = max(wiT1_table_size, experiment.size_of_wiT1)
+        experiment.size_of_wiT2 = max(wiT2_table_size, experiment.size_of_wiT2)
+        experiment.size_of_input_table = max(input_table_size, experiment.size_of_input_table)
+        experiment.access_input_buffer += access_input_buffer
+        experiment.access_weight_buffer += access_weight_buffer
+        experiment.access_partial_sum_buffer += access_partial_sum_buffer
+
         write_experimental_data_to_excel(worksheet, layer_num, (i, i + 1), number_of_memory_access_weights,
                                          number_of_memory_access_input,
                                          number_of_access_to_multiplier, number_of_access_to_accumulator2,
                                          number_of_access_to_accumulator3,
                                          wiT1_table_size, wiT2_table_size, input_table_size, access_input_buffer,
                                          access_weight_buffer, access_partial_sum_buffer)
-    
+
+    filter_num = (0, 1) if layer_num == 1 else (2, 3)
+    write_experimental_data_to_excel(general_worksheet, layer_num, filter_num, experiment.n_memory_access_weights,
+                                     experiment.n_memory_access_inputs,
+                                     experiment.n_access_to_multiplier,
+                                     experiment.n_access_to_accumulator2, experiment.n_access_to_accumulator3,
+                                     experiment.size_of_wiT1, experiment.size_of_wiT2,
+                                     experiment.size_of_input_table, experiment.access_input_buffer,
+                                     experiment.access_weight_buffer,
+                                     experiment.access_partial_sum_buffer, mode='general')
     workbook.close()
     return result + bias
 
@@ -94,9 +134,12 @@ def write_experimental_data_to_excel(worksheet, layer_num, filter_num, n_memory_
                                      n_access_to_multiplier,
                                      n_access_to_accumulator2, n_access_to_accumulator3, size_of_wiT1, size_of_wiT2,
                                      size_of_input_table, access_input_buffer, access_weight_buffer,
-                                     access_partial_sum_buffer):
+                                     access_partial_sum_buffer, mode='common'):
     if filter_num == (0, 1):
-        worksheet.write('A1', 'Filter')
+        if mode == 'general':
+            worksheet.write('A1', 'Layer')
+        else:
+            worksheet.write('A1', 'Filter')
         worksheet.write('B1', '#memory_access_weights')
         worksheet.write('C1', '#memory_access_inputs')
         worksheet.write('D1', '#access_multiplier')
@@ -109,15 +152,30 @@ def write_experimental_data_to_excel(worksheet, layer_num, filter_num, n_memory_
         worksheet.write('K1', '#access_weight_buffer')
         worksheet.write('L1', '#access_partial_sum_buffer')
 
-    worksheet.write('A' + str(filter_num[0] / 2 + 2), f'Filter{filter_num}')
-    worksheet.write('B' + str(filter_num[0] / 2 + 2), n_memory_access_weights)
-    worksheet.write('C' + str(filter_num[0] / 2 + 2), n_memory_access_inputs)
-    worksheet.write('D' + str(filter_num[0] / 2 + 2), n_access_to_multiplier)
-    worksheet.write('E' + str(filter_num[0] / 2 + 2), n_access_to_accumulator2)
-    worksheet.write('F' + str(filter_num[0] / 2 + 2), n_access_to_accumulator3)
-    worksheet.write('G' + str(filter_num[0] / 2 + 2), size_of_wiT1)
-    worksheet.write('H' + str(filter_num[0] / 2 + 2), size_of_wiT2)
-    worksheet.write('I' + str(filter_num[0] / 2 + 2), size_of_input_table)
-    worksheet.write('J' + str(filter_num[0] / 2 + 2), access_input_buffer)
-    worksheet.write('K' + str(filter_num[0] / 2 + 2), access_weight_buffer)
-    worksheet.write('L' + str(filter_num[0] / 2 + 2), access_partial_sum_buffer)
+    if mode == 'general':
+        worksheet.write('A' + str(layer_num + 1), f'Layer{layer_num}')
+        worksheet.write('B' + str(layer_num + 1), n_memory_access_weights)
+        worksheet.write('C' + str(layer_num + 1), n_memory_access_inputs)
+        worksheet.write('D' + str(layer_num + 1), n_access_to_multiplier)
+        worksheet.write('E' + str(layer_num + 1), n_access_to_accumulator2)
+        worksheet.write('F' + str(layer_num + 1), n_access_to_accumulator3)
+        worksheet.write('G' + str(layer_num + 1), size_of_wiT1)
+        worksheet.write('H' + str(layer_num + 1), size_of_wiT2)
+        worksheet.write('I' + str(layer_num + 1), size_of_input_table)
+        worksheet.write('J' + str(layer_num + 1), access_input_buffer)
+        worksheet.write('K' + str(layer_num + 1), access_weight_buffer)
+        worksheet.write('L' + str(layer_num + 1), access_partial_sum_buffer)
+
+    else:
+        worksheet.write('A' + str(filter_num[0] / 2 + 2), f'Filter{filter_num}')
+        worksheet.write('B' + str(filter_num[0] / 2 + 2), n_memory_access_weights)
+        worksheet.write('C' + str(filter_num[0] / 2 + 2), n_memory_access_inputs)
+        worksheet.write('D' + str(filter_num[0] / 2 + 2), n_access_to_multiplier)
+        worksheet.write('E' + str(filter_num[0] / 2 + 2), n_access_to_accumulator2)
+        worksheet.write('F' + str(filter_num[0] / 2 + 2), n_access_to_accumulator3)
+        worksheet.write('G' + str(filter_num[0] / 2 + 2), size_of_wiT1)
+        worksheet.write('H' + str(filter_num[0] / 2 + 2), size_of_wiT2)
+        worksheet.write('I' + str(filter_num[0] / 2 + 2), size_of_input_table)
+        worksheet.write('J' + str(filter_num[0] / 2 + 2), access_input_buffer)
+        worksheet.write('K' + str(filter_num[0] / 2 + 2), access_weight_buffer)
+        worksheet.write('L' + str(filter_num[0] / 2 + 2), access_partial_sum_buffer)

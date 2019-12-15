@@ -1,20 +1,58 @@
 import numpy as np
 import tensorflow as tf
 from Convolve import convolution
+import xlsxwriter as excel
 
 input_image = np.load('test_image.npy')
 input_image = tf.constant(input_image, dtype=tf.float32)
 input_image = tf.reshape(input_image, [1, input_image.shape[0], input_image.shape[1], input_image.shape[2]])
 sess = tf.Session()
 input_image = np.array(sess.run(input_image))
+
+
 # net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\bvlc_alexnet.npy", "rb"), encoding="latin1",
 #                    allow_pickle=True).item()
 
 # net_data = np.load(open("bvlc_alexnet.npy", "rb"), encoding="latin1",
 #                    allow_pickle=True).item()
-net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\AlexNet_quantized_weights_4.pickle", "rb"),
-                   encoding="latin1",
-                   allow_pickle=True)
+
+# net_data = np.load(open(r"C:\Users\Mehran\Desktop\Desktop files\Lotfi-Kamran\Weights\AlexNet_quantized_weights_4.pickle", "rb"),
+#                    encoding="latin1",
+#                    allow_pickle=True)
+
+
+def weight_preprocess(weight_dict):
+    new_weight_dict = {}
+    val = list(weight_dict.values())
+    index = 1
+    for i in range(0, len(val), 2):
+        print(val[i].shape)
+        print(val[i + 1].shape)
+
+        new_weight_dict[f'convolution_{index}'] = val[i]
+        new_weight_dict[f'bias_{index}'] = val[i + 1]
+        index += 1
+
+    return new_weight_dict
+
+
+net_data = np.load(
+    open(r"C:\Users\Mehran\Desktop\Desktop files\Lotfi-Kamran\Weights\INQ_AlexNet_quantized_weights_0.6753.pickle",
+         "rb"),
+    encoding="latin1",
+    allow_pickle=True)
+
+net_data = weight_preprocess(net_data)
+
+workbook_overal = excel.Workbook(f'result\\General.xlsx')
+worksheet_overal = workbook_overal.add_worksheet('General')
+
+
+def convert_to_8bits(input32bits):
+    r_max = np.max(input32bits)
+    r_min = np.min(input32bits)
+    converted = np.int8(256 / (r_max - r_min) * input32bits)
+    return converted
 
 
 def conv_layer(input_data, key, stride=1, padding="VALID"):
@@ -28,28 +66,19 @@ def conv_layer(input_data, key, stride=1, padding="VALID"):
     input_data_for_UCNN = input_data.copy()
     input_data_for_UCNN = input_data_for_UCNN.reshape(
         [input_data.shape[1], input_data.shape[2], input_data.shape[3]])
-    convolution(input_data_for_UCNN, convW, convb, layer_num=f'convolution_{key}', stride=stride, padding=padding)
+
+    # input_data_for_UCNN = convert_to_8bits(input_data_for_UCNN)
+    input_data_for_UCNN = input_data_for_UCNN.astype(np.float16)
+
+    convolution(worksheet_overal, input_data_for_UCNN, convW, convb, layer_num=key, stride=stride,
+                padding=padding)
 
     kernel = tf.constant(convW, tf.float32)
     biases = tf.constant(convb, tf.float32)
     temp1 = tf.nn.convolution(input_data, kernel, padding, [1, stride, stride, 1])
-    temp2 = tf.nn.relu(temp1)
-    result = tf.nn.bias_add(temp2, biases)
+    temp2 = tf.nn.bias_add(temp1, biases)
+    result = tf.nn.relu(temp2)
     return sess.run(result)
-    # c_i = kernel.get_shape()[-1]
-    # c_o = convW.shape[0]
-    # assert c_i % group == 0
-    # assert c_o % group == 0
-    # convolve = lambda i, k: tf.nn.conv2d(i, k, [1, stride, stride, 1], padding=padding)
-    #
-    # if group == 1:
-    #     conv = convolve(input_data, kernel)
-    # else:
-    #     input_groups = tf.split(input_data, group, 3)  # tf.split(3, group, input)
-    #     kernel_groups = tf.split(kernel, group, 3)  # tf.split(3, group, kernel)
-    #     output_groups = [convolve(i, k) for i, k in zip(input_groups, kernel_groups)]
-    #     conv = tf.concat(output_groups, 3)  # tf.concat(3, output_groups)
-    # return tf.reshape(tf.nn.bias_add(conv, biases), [-1] + conv.get_shape().as_list()[1:])
 
 
 print('layer1')
@@ -62,7 +91,7 @@ maxpool1 = tf.nn.max_pool(conv1,
                           ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding="SAME")
 maxpool1 = sess.run(maxpool1)
 # maxpool1 = maxpool1.reshape([maxpool1.shape[1], maxpool1.shape[2], maxpool1.shape[3]])
-#
+
 
 print('pool1.shape', maxpool1.shape)
 print('layer2')
@@ -101,6 +130,8 @@ maxpool5_temp = tf.nn.max_pool(conv5,
                                ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding="SAME")
 maxpool5 = sess.run(maxpool5_temp)
 maxpool5 = maxpool5.reshape([maxpool5.shape[1], maxpool5.shape[2], maxpool5.shape[3]])
+
+workbook_overal.close()
 
 print('conv5.shape', conv5.shape)
 print('pool5.shape', maxpool5.shape)

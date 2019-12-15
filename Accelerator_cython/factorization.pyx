@@ -16,8 +16,25 @@ cdef np.ndarray quantization(np.ndarray kernel, int number_of_weights = 16):
         np.ndarray quantized = np.int8(number_of_weights / (r_max - r_min) * kernel)
     return quantized
 
+
+class Experiment:
+    def __init__(self):
+        self.exp_quantized_without_zero_weights = ExperimentalData()
+        self.exp_quantized_without_zero_weights_and_inputs = ExperimentalData()
+        self.exp_quantized_factorized_without_zero_weights = ExperimentalData()
+        self.exp_quantized_factorized_without_zero_weights_and_inputs = ExperimentalData()
+        self.exp_factorized_without_zero_weights = ExperimentalData()
+        self.exp_factorized_without_zero_weights_and_inputs = ExperimentalData()
+        self.exp_base = ExperimentalData()
+        self.exp_base_x_0 = ExperimentalData()
+        self.exp_base_w_0 = ExperimentalData()
+        self.exp_base_w_x_0 = ExperimentalData()
+
+
 @cython.cdivision(True)
-cpdef np.ndarray convolve(worksheet, np.ndarray input_data, np.ndarray conv_layer, np.ndarray bias, str layer_num,
+cpdef np.ndarray convolve(general_worksheet, worksheet, np.ndarray input_data, np.ndarray conv_layer, np.ndarray bias,
+                          experiment,
+                          int layer_num,
                           str mode,
                           str padding="VALID", int stride=1, int number_of_weights = 16):
     """
@@ -68,6 +85,15 @@ cpdef np.ndarray convolve(worksheet, np.ndarray input_data, np.ndarray conv_laye
             #   Without factorization part (Quantized only)
             exp_quantized_without_zero_weights, exp_quantized_without_zero_weights_and_inputs = \
                 conv2d(input_data_padded, kernel, 'NON_FACTORIZED', True, None, None, stride)
+
+            experiment.exp_quantized_without_zero_weights.number_of_memory_access += exp_quantized_without_zero_weights.number_of_memory_access
+            experiment.exp_quantized_without_zero_weights.number_of_add += exp_quantized_without_zero_weights.number_of_add
+            experiment.exp_quantized_without_zero_weights.number_of_multiply += exp_quantized_without_zero_weights.number_of_multiply
+
+            experiment.exp_quantized_without_zero_weights_and_inputs.number_of_memory_access += exp_quantized_without_zero_weights_and_inputs.number_of_memory_access
+            experiment.exp_quantized_without_zero_weights_and_inputs.number_of_add += exp_quantized_without_zero_weights_and_inputs.number_of_add
+            experiment.exp_quantized_without_zero_weights_and_inputs.number_of_multiply += exp_quantized_without_zero_weights_and_inputs.number_of_multiply
+
             write_data_to_excel(worksheet, layer_num, f, 'quantized', exp_quantized_without_zero_weights,
                                 exp_quantized_without_zero_weights_and_inputs)
 
@@ -75,6 +101,15 @@ cpdef np.ndarray convolve(worksheet, np.ndarray input_data, np.ndarray conv_laye
             weights, repeated = conv_factorization(kernel)
             exp_quantized_factorized_without_zero_weights, exp_quantized_factorized_without_zero_weights_and_inputs = \
                 conv2d(input_data_padded, kernel, 'FACTORIZED', True, repeated, weights, stride)
+
+            experiment.exp_quantized_factorized_without_zero_weights.number_of_memory_access += exp_quantized_factorized_without_zero_weights.number_of_memory_access
+            experiment.exp_quantized_factorized_without_zero_weights.number_of_add += exp_quantized_factorized_without_zero_weights.number_of_add
+            experiment.exp_quantized_factorized_without_zero_weights.number_of_multiply += exp_quantized_factorized_without_zero_weights.number_of_multiply
+
+            experiment.exp_quantized_factorized_without_zero_weights_and_inputs.number_of_memory_access += exp_quantized_factorized_without_zero_weights_and_inputs.number_of_memory_access
+            experiment.exp_quantized_factorized_without_zero_weights_and_inputs.number_of_add += exp_quantized_factorized_without_zero_weights_and_inputs.number_of_add
+            experiment.exp_quantized_factorized_without_zero_weights_and_inputs.number_of_multiply += exp_quantized_factorized_without_zero_weights_and_inputs.number_of_multiply
+
             write_data_to_excel(worksheet, layer_num, f, 'quantized+factorized',
                                 exp_quantized_factorized_without_zero_weights,
                                 exp_quantized_factorized_without_zero_weights_and_inputs)
@@ -87,6 +122,22 @@ cpdef np.ndarray convolve(worksheet, np.ndarray input_data, np.ndarray conv_laye
             write_data_to_excel(worksheet, layer_num, f, 'base',
                                 exp_base, exp_base_w_0, exp_base_x_0, exp_base_w_x_0)
 
+            experiment.exp_base.number_of_memory_access += exp_base.number_of_memory_access
+            experiment.exp_base.number_of_add += exp_base.number_of_add
+            experiment.exp_base.number_of_multiply += exp_base.number_of_multiply
+
+            experiment.exp_base_x_0.number_of_memory_access += exp_base_x_0.number_of_memory_access
+            experiment.exp_base_x_0.number_of_add += exp_base_x_0.number_of_add
+            experiment.exp_base_x_0.number_of_multiply += exp_base_x_0.number_of_multiply
+
+            experiment.exp_base_w_0.number_of_memory_access += exp_base_w_0.number_of_memory_access
+            experiment.exp_base_w_0.number_of_add += exp_base_w_0.number_of_add
+            experiment.exp_base_w_0.number_of_multiply += exp_base_w_0.number_of_multiply
+
+            experiment.exp_base_w_x_0.number_of_memory_access += exp_base_w_x_0.number_of_memory_access
+            experiment.exp_base_w_x_0.number_of_add += exp_base_w_x_0.number_of_add
+            experiment.exp_base_w_x_0.number_of_multiply += exp_base_w_x_0.number_of_multiply
+
             #   With factorization part (Factorization without Quantization)
             weights, repeated = conv_factorization(kernel)
             exp_factorized_without_zero_weights, exp_factorized_without_zero_weights_and_inputs = \
@@ -94,7 +145,86 @@ cpdef np.ndarray convolve(worksheet, np.ndarray input_data, np.ndarray conv_laye
             write_data_to_excel(worksheet, layer_num, f, 'factorized',
                                 exp_factorized_without_zero_weights, exp_factorized_without_zero_weights_and_inputs)
 
+            experiment.exp_factorized_without_zero_weights.number_of_memory_access += exp_factorized_without_zero_weights.number_of_memory_access
+            experiment.exp_factorized_without_zero_weights.number_of_add += exp_factorized_without_zero_weights.number_of_add
+            experiment.exp_factorized_without_zero_weights.number_of_multiply += exp_factorized_without_zero_weights.number_of_multiply
+
+            experiment.exp_factorized_without_zero_weights_and_inputs.number_of_memory_access += exp_factorized_without_zero_weights_and_inputs.number_of_memory_access
+            experiment.exp_factorized_without_zero_weights_and_inputs.number_of_add += exp_factorized_without_zero_weights_and_inputs.number_of_add
+            experiment.exp_factorized_without_zero_weights_and_inputs.number_of_multiply += exp_factorized_without_zero_weights_and_inputs.number_of_multiply
+
+    write_overal_data_to_excel(general_worksheet, experiment, layer_num)
     return result
+
+def write_overal_data_to_excel(worksheet, experiment, layer):
+    if layer == 1:
+        worksheet.write('A1', 'Layer')
+        worksheet.write('B2', 'base')
+        worksheet.write('C2', 'base-w-0')
+        worksheet.write('D2', 'base-x-0')
+        worksheet.write('E2', 'base-w-x-0')
+        worksheet.write('F2', 'quantized (Without zero weights)')
+        worksheet.write('G2', 'quantized (Without zero weights and inputs)')
+        worksheet.write('H2', 'factorized (Without zero weights)')
+        worksheet.write('I2', 'factorized (Without zero weights and inputs)')
+        worksheet.write('J2', 'factorized+quantized (Without zero weights)')
+        worksheet.write('K2', 'factorized+quantized (Without zero weights and inputs)')
+        worksheet.write('M2', 'base')
+        worksheet.write('N2', 'base-w-0')
+        worksheet.write('O2', 'base-x-0')
+        worksheet.write('P2', 'base-w-x-0')
+        worksheet.write('Q2', 'quantized (Without zero weights)')
+        worksheet.write('R2', 'quantized (Without zero weights and inputs)')
+        worksheet.write('S2', 'factorized (Without zero weights)')
+        worksheet.write('T2', 'factorized (Without zero weights and inputs)')
+        worksheet.write('U2', 'factorized+quantized (Without zero weights)')
+        worksheet.write('V2', 'factorized+quantized (Without zero weights and inputs)')
+        worksheet.write('X2', 'base')
+        worksheet.write('Y2', 'base-w-0')
+        worksheet.write('Z2', 'base-x-0')
+        worksheet.write('AA2', 'base-w-x-0')
+        worksheet.write('AB2', 'quantized (Without zero weights)')
+        worksheet.write('AC2', 'quantized (Without zero weights and inputs)')
+        worksheet.write('AD2', 'factorized (Without zero weights)')
+        worksheet.write('AE2', 'factorized (Without zero weights and inputs)')
+        worksheet.write('AF2', 'factorized+quantized (Without zero weights)')
+        worksheet.write('AG2', 'factorized+quantized (Without zero weights and inputs)')
+
+    worksheet.write(f'A{layer + 2}', f'layer_{layer}')
+    worksheet.write(f'B{layer + 2}', experiment.exp_base.number_of_memory_access)
+    worksheet.write(f'C{layer + 2}', experiment.exp_base_w_0.number_of_memory_access)
+    worksheet.write(f'D{layer + 2}', experiment.exp_base_x_0.number_of_memory_access)
+    worksheet.write(f'E{layer + 2}', experiment.exp_base_w_x_0.number_of_memory_access)
+    worksheet.write(f'F{layer + 2}', experiment.exp_quantized_without_zero_weights.number_of_memory_access)
+    worksheet.write(f'G{layer + 2}', experiment.exp_quantized_without_zero_weights_and_inputs.number_of_memory_access)
+    worksheet.write(f'H{layer + 2}', experiment.exp_factorized_without_zero_weights.number_of_memory_access)
+    worksheet.write(f'I{layer + 2}', experiment.exp_factorized_without_zero_weights_and_inputs.number_of_memory_access)
+    worksheet.write(f'J{layer + 2}', experiment.exp_quantized_factorized_without_zero_weights.number_of_memory_access)
+    worksheet.write(f'K{layer + 2}',
+                    experiment.exp_quantized_factorized_without_zero_weights_and_inputs.number_of_memory_access)
+
+    worksheet.write(f'M{layer + 2}', experiment.exp_base.number_of_multiply)
+    worksheet.write(f'N{layer + 2}', experiment.exp_base_w_0.number_of_multiply)
+    worksheet.write(f'O{layer + 2}', experiment.exp_base_x_0.number_of_multiply)
+    worksheet.write(f'P{layer + 2}', experiment.exp_base_w_x_0.number_of_multiply)
+    worksheet.write(f'Q{layer + 2}', experiment.exp_quantized_without_zero_weights.number_of_multiply)
+    worksheet.write(f'R{layer + 2}', experiment.exp_quantized_without_zero_weights_and_inputs.number_of_multiply)
+    worksheet.write(f'S{layer + 2}', experiment.exp_factorized_without_zero_weights.number_of_multiply)
+    worksheet.write(f'T{layer + 2}', experiment.exp_factorized_without_zero_weights_and_inputs.number_of_multiply)
+    worksheet.write(f'U{layer + 2}', experiment.exp_quantized_factorized_without_zero_weights.number_of_multiply)
+    worksheet.write(f'V{layer + 2}',
+                    experiment.exp_quantized_factorized_without_zero_weights_and_inputs.number_of_multiply)
+
+    worksheet.write(f'X{layer + 2}', experiment.exp_base.number_of_add)
+    worksheet.write(f'Y{layer + 2}', experiment.exp_base_w_0.number_of_add)
+    worksheet.write(f'Z{layer + 2}', experiment.exp_base_x_0.number_of_add)
+    worksheet.write(f'AA{layer + 2}', experiment.exp_base_w_x_0.number_of_add)
+    worksheet.write(f'AB{layer + 2}', experiment.exp_quantized_without_zero_weights.number_of_add)
+    worksheet.write(f'AC{layer + 2}', experiment.exp_quantized_without_zero_weights_and_inputs.number_of_add)
+    worksheet.write(f'AD{layer + 2}', experiment.exp_factorized_without_zero_weights.number_of_add)
+    worksheet.write(f'AE{layer + 2}', experiment.exp_factorized_without_zero_weights_and_inputs.number_of_add)
+    worksheet.write(f'AF{layer + 2}', experiment.exp_quantized_factorized_without_zero_weights.number_of_add)
+    worksheet.write(f'AG{layer + 2}', experiment.exp_quantized_factorized_without_zero_weights_and_inputs.number_of_add)
 
 def write_unique_to_excel(worksheet, layer_num, filter_num, unique):
     if filter_num == 0:
@@ -484,7 +614,7 @@ def factorized_without_zero_weights_and_inputs(exp, data, unique_weights, positi
             exp.number_of_add -= number_of_zero_inputs
             if number_of_zero_inputs < positions[ind].shape[0]:
                 exp.number_of_multiply += 1
-            else: # we do not read weights that are corresponded to zero inputs
+            else:  # we do not read weights that are corresponded to zero inputs
                 exp.number_of_memory_access -= 1
 
         ind += 1

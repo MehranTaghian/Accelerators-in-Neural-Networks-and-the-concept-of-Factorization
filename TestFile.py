@@ -1,8 +1,5 @@
-import tensorflow as tf
 import numpy as np
 
-sess = tf.Session()
-#
 # a = tf.constant(4, dtype=tf.float32)
 # b = tf.constant(3.0)
 # total = a + b
@@ -152,13 +149,6 @@ sess = tf.Session()
 # sess.run(b)
 
 
-import xlsxwriter
-
-# Create an new Excel file and add a worksheet.
-workbook = xlsxwriter.Workbook('merge1.xlsx')
-worksheet = workbook.add_worksheet()
-
-
 # Increase the cell size of the merged cells to highlight the formatting.
 # worksheet.set_column('B:D', 12)
 # worksheet.set_row(3, 30)
@@ -183,11 +173,12 @@ worksheet = workbook.add_worksheet()
 #
 # workbook.close()
 
+net_data = np.load(
+    open(r"C:\Users\Mehran\Desktop\Desktop files\Lotfi-Kamran\Weights\INQ_AlexNet_quantized_weights_0.6753.pickle",
+         "rb"),
+    encoding="latin1",
+    allow_pickle=True)
 
-def f(name, id, *args):
-    print(name)
-    print(id)
-    for a in args:
-        print(a)
+print(net_data.keys())
 
-f('mehran', 1, 'hello', 'taghian')
+print(list(net_data.values())[0].shape)

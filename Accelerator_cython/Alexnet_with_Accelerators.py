@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import factorization
+from factorization import Experiment
 from Get_alexnet_weights import get_weights
 import xlsxwriter as excel
 
@@ -16,9 +17,54 @@ input_image = np.array(sess.run(input_image))
 #                    allow_pickle=True).item()
 weight, bias = get_weights('../alex_net')
 
-net_data = np.load(open(r"C:\Users\Mehran\Desktop\Lotfi-Kamran\Weights\AlexNet_quantized_weights_4.pickle", "rb"),
-                   encoding="latin1",
-                   allow_pickle=True)
+
+# net_data = np.load(
+#     open(r"C:\Users\Mehran\Desktop\Desktop files\Lotfi-Kamran\Weights\AlexNet_quantized_weights_4.pickle", "rb"),
+#     encoding="latin1",
+#     allow_pickle=True)
+
+def weight_preprocess(weight_dict):
+    new_weight_dict = {}
+    val = list(weight_dict.values())
+    index = 1
+    for i in range(0, len(val), 2):
+        print(val[i].shape)
+        print(val[i + 1].shape)
+
+        new_weight_dict[f'convolution_{index}'] = val[i]
+        new_weight_dict[f'bias_{index}'] = val[i + 1]
+        index += 1
+
+    return new_weight_dict
+
+
+net_data = np.load(
+    open(r"C:\Users\Mehran\Desktop\Desktop files\Lotfi-Kamran\Weights\INQ_AlexNet_quantized_weights_0.6753.pickle",
+         "rb"),
+    encoding="latin1",
+    allow_pickle=True)
+
+net_data = weight_preprocess(net_data)
+
+
+def convert_to_8bits(input32bits):
+    r_max = np.max(input32bits)
+    r_min = np.min(input32bits)
+    converted = np.int8(256 / (r_max - r_min) * input32bits)
+    return converted
+
+
+workbook_overal = excel.Workbook(f'result\\General.xlsx')
+worksheet_overal = workbook_overal.add_worksheet(f'general')
+merge_format_temp = workbook_overal.add_format({
+    'bold': 1,
+    'border': 1,
+    'align': 'center',
+    'valign': 'vcenter'})
+
+worksheet_overal.merge_range('B1:K1', 'Memory Access', merge_format_temp)
+worksheet_overal.merge_range('M1:W1', 'Multiply', merge_format_temp)
+worksheet_overal.merge_range('Y1:AH1', 'Add', merge_format_temp)
 
 
 def conv_layer(input_data_non_quantized, input_data_quantized, key, stride=1, padding="VALID"):
@@ -49,16 +95,27 @@ def conv_layer(input_data_non_quantized, input_data_quantized, key, stride=1, pa
     # input_data_numpy = np.array(input_data.eval(session=sess))
     input_data_factorization = input_data_non_quantized.copy()
     input_data_factorization = input_data_factorization.reshape(
-        [input_data_non_quantized.shape[1], input_data_non_quantized.shape[2], input_data_non_quantized.shape[3]])
-    factorization.convolve(worksheet, input_data_factorization, convW_non_quantized, convb_non_quantized,
-                           layer_num=f'convolution_{key}', mode='NON_QUANTIZED', stride=stride,
+        [input_data_non_quantized.shape[1], input_data_non_quantized.shape[2],
+         input_data_non_quantized.shape[3]])
+
+    experiment = Experiment()
+
+    # input_data_factorization = convert_to_8bits(input_data_factorization)
+    input_data_factorization = input_data_factorization.astype(np.float16)
+
+    factorization.convolve(worksheet_overal, worksheet, input_data_factorization, convW_non_quantized,
+                           convb_non_quantized,
+                           experiment, layer_num=key, mode='NON_QUANTIZED', stride=stride,
                            padding=padding)
 
     input_data_factorization = input_data_quantized.copy()
+    # input_data_factorization = convert_to_8bits(input_data_factorization)
+    input_data_factorization = input_data_factorization.astype(np.float16)
+
     input_data_factorization = input_data_factorization.reshape(
         [input_data_non_quantized.shape[1], input_data_non_quantized.shape[2], input_data_non_quantized.shape[3]])
-    factorization.convolve(worksheet, input_data_factorization, convW_quantized, convb_quantized,
-                           layer_num=f'convolution_{key}', mode='QUANTIZED', stride=stride,
+    factorization.convolve(worksheet_overal, worksheet, input_data_factorization, convW_quantized, convb_quantized,
+                           experiment, layer_num=key, mode='QUANTIZED', stride=stride,
                            padding=padding)
 
     workbook.close()
@@ -73,8 +130,8 @@ def conv_layer(input_data_non_quantized, input_data_quantized, key, stride=1, pa
     result1 = tf.nn.bias_add(temp2, biases1)
 
     temp1 = tf.nn.convolution(input_data_non_quantized, kernel2, padding, [1, stride, stride, 1])
-    temp2 = tf.nn.relu(temp1)
-    result2 = tf.nn.bias_add(temp2, biases2)
+    temp2 = tf.nn.bias_add(temp1, biases2)
+    result2 = tf.nn.relu(temp2)
 
     return sess.run(result1), sess.run(result2)
 
@@ -168,3 +225,5 @@ conv5_non_quantized, conv5_quantized = conv_layer(conv4_non_quantized, conv4_qua
 # fc8W = np.array(net_data["fc_3"].T)
 # fc8b = np.array(net_data["fc_3_bias"])
 # output = fc8.dot(fc8W) + fc8b
+
+workbook_overal.close()

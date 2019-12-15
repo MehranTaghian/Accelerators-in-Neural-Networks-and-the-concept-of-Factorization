@@ -147,10 +147,6 @@ def conv2d(data, filter, exp_params, stride=1):
 
             j += 1
         i += 1
-
-    print(i)
-    print(j)
-
     return result
 
 
